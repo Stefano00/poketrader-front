@@ -1,0 +1,147 @@
+<div class="card-detail-container">
+  @if (loading) {
+    <mat-spinner></mat-spinner>
+  } @else if (error) {
+    <div class="error">{{error}}</div>
+  } @else if (card) {
+    <mat-card class="card-detail">
+      <div class="card-header">
+        <h1>{{card.name}}</h1>
+        <span class="hp">HP {{card.hp}}</span>
+      </div>
+
+      <div class="card-image">
+        <img [src]="card.images.large" [alt]="card.name">
+      </div>
+
+      <div class="card-info">
+        <div class="set-info">
+          <h2>Set Information</h2>
+          <p>Set: {{card.set.name}}</p>
+          <p>Series: {{card.set.series}}</p>
+          <p>Release Date: {{card.set.releaseDate | date:'longDate'}}</p>
+          <p>Rarity: {{card.rarity}}</p>
+        </div>
+
+        <div class="types-info">
+          <h2>Types</h2>
+          <div class="types">
+            @for (type of card.types; track type) {
+              <span class="type {{type.toLowerCase()}}">{{type}}</span>
+            }
+          </div>
+        </div>
+
+        @if (card.attacks && card.attacks.length > 0) {
+          <div class="attacks-info">
+            <h2>Attacks</h2>
+            @for (attack of card.attacks; track attack.name) {
+              <div class="attack">
+                <div class="attack-header">
+                  <span class="attack-name">{{attack.name}}</span>
+                  <span class="attack-damage">{{attack.damage}}</span>
+                </div>
+                <div class="attack-cost">
+                  @for (cost of attack.cost; track cost) {
+                    <span class="energy {{cost.toLowerCase()}}">{{cost}}</span>
+                  }
+                </div>
+                @if (attack.text) {
+                  <p class="attack-text">{{attack.text}}</p>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        @if (card.weaknesses?.length) {
+          <div class="weaknesses-info">
+            <h2>Weaknesses</h2>
+            @for (weakness of card.weaknesses; track weakness.type) {
+              <div class="weakness">
+                <span class="type {{weakness.type.toLowerCase()}}">{{weakness.type}}</span>
+                <span class="value">{{weakness.value}}</span>
+              </div>
+            }
+          </div>
+        }
+
+        @if (card.retreatCost && card.retreatCost.length > 0) {
+          <div class="retreat-info">
+            <h2>Retreat Cost</h2>
+            <div class="retreat-cost">
+              @for (cost of card.retreatCost; track cost) {
+                <span class="energy {{cost.toLowerCase()}}">{{cost}}</span>
+              }
+            </div>
+          </div>
+        }
+
+        @if (card.tcgplayer?.prices) {
+          <div class="market-info">
+            <h2>Market Prices</h2>
+            <div class="price-info">
+              @if (card.tcgplayer?.prices?.holofoil) {
+                <div class="price-category">
+                  <h3>Holofoil</h3>
+                  @if (card.tcgplayer?.prices?.holofoil?.market) {
+                    <p>Market: ${{getHolofoilPrice('market')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.holofoil?.low) {
+                    <p>Low: ${{getHolofoilPrice('low')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.holofoil?.mid) {
+                    <p>Mid: ${{getHolofoilPrice('mid')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.holofoil?.high) {
+                    <p>High: ${{getHolofoilPrice('high')}}</p>
+                  }
+                </div>
+              }
+
+              @if (card.tcgplayer?.prices?.normal) {
+                <div class="price-category">
+                  <h3>Normal</h3>
+                  @if (card.tcgplayer?.prices?.normal?.market) {
+                    <p>Market: ${{getNormalPrice('market')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.normal?.low) {
+                    <p>Low: ${{getNormalPrice('low')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.normal?.mid) {
+                    <p>Mid: ${{getNormalPrice('mid')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.normal?.high) {
+                    <p>High: ${{getNormalPrice('high')}}</p>
+                  }
+                </div>
+              }
+
+              @if (card.tcgplayer?.prices?.reverseHolofoil) {
+                <div class="price-category">
+                  <h3>Reverse Holofoil</h3>
+                  @if (card.tcgplayer?.prices?.reverseHolofoil?.market) {
+                    <p>Market: ${{getReverseHolofoilPrice('market')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.reverseHolofoil?.low) {
+                    <p>Low: ${{getReverseHolofoilPrice('low')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.reverseHolofoil?.mid) {
+                    <p>Mid: ${{getReverseHolofoilPrice('mid')}}</p>
+                  }
+                  @if (card.tcgplayer?.prices?.reverseHolofoil?.high) {
+                    <p>High: ${{getReverseHolofoilPrice('high')}}</p>
+                  }
+                </div>
+              }
+              
+              @if (card.tcgplayer?.updatedAt) {
+                <p class="price-update">Updated: {{card.tcgplayer?.updatedAt | date:'medium'}}</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </mat-card>
+  }
+</div>

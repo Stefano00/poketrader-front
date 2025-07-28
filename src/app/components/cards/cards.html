@@ -1,0 +1,69 @@
+<div class="cards-container">
+  <form [formGroup]="searchForm" (ngSubmit)="searchCards()" class="search-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Card Name</mat-label>
+      <input matInput formControlName="cardName" placeholder="Enter card name...">
+    </mat-form-field>
+    <button mat-raised-button color="primary" type="submit">
+      Search
+    </button>
+  </form>
+
+  @if (loading) {
+    <mat-spinner></mat-spinner>
+  }
+
+  <div class="cards-grid">
+    @for (card of cards; track card.id) {
+      <mat-card class="card" [routerLink]="['/cards', card.id]">
+        <img mat-card-image [src]="card.images.large" [alt]="card.name">
+        <mat-card-content>
+          <div class="card-header">
+            <h3>{{card.name}}</h3>
+            <span class="hp">HP {{card.hp}}</span>
+          </div>
+
+          <div class="set-info">
+            <span class="set-name">{{card.set.name}}</span>
+            <span class="release-date">Released: {{card.set.releaseDate | date:'MMM d, yyyy'}}</span>
+          </div>
+          
+          <div class="card-types">
+            @for (type of card.types; track type) {
+              <span class="type {{type.toLowerCase()}}">{{type}}</span>
+            }
+          </div>
+
+          @if (card.attacks && card.attacks.length > 0) {
+            <div class="attacks">
+              <h4>Attacks</h4>
+              @for (attack of card.attacks; track attack.name) {
+                <div class="attack">
+                  <div class="attack-header">
+                    <span class="attack-name">{{attack.name}}</span>
+                    <span class="attack-damage">{{attack.damage}}</span>
+                  </div>
+                  <p class="attack-text">{{attack.text}}</p>
+                </div>
+              }
+            </div>
+          }
+
+          <div class="card-info">
+            <div class="card-details">
+              <span class="rarity">{{card.rarity}}</span>
+              @if (card.tcgplayer?.prices) {
+                <span class="price">
+                  ${{getMarketPrice(card)}}
+                </span>
+              }
+            </div>
+            @if (card.flavorText) {
+              <p class="flavor-text">{{card.flavorText}}</p>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+</div>
