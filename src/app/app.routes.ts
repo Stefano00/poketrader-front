@@ -29,5 +29,9 @@ export const routes: Routes = [
   { 
     path: 'auth', 
     loadComponent: () => import('./components/auth/auth').then(m => m.Auth)
+  },
+  {
+    path: '**',
+    redirectTo: 'home'
   }
 ];
