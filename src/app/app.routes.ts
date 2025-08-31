@@ -30,6 +30,10 @@ export const routes: Routes = [
     path: 'auth', 
     loadComponent: () => import('./components/auth/auth').then(m => m.Auth)
   },
+  { 
+    path: 'tournament', 
+    loadComponent: () => import('./components/tournament/tournament').then(m => m.Tournament)
+  },
   {
     path: '**',
     redirectTo: 'home'
