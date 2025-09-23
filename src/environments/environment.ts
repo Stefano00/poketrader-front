@@ -1,11 +1,12 @@
 export const environment = {
   firebase: {
-    apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE", // <--- YOU NEED TO GET THIS!
+    apiKey: "AIzaSyBoWRdYbqxSjQZxMfhGaoNkH5N2cT-Q6pc",
     authDomain: "poketrader-21e98.firebaseapp.com",
     projectId: "poketrader-21e98",
     storageBucket: "poketrader-21e98.appspot.com",
     messagingSenderId: "165576518783",
-    appId: "YOUR_APP_ID_FROM_FIREBASE_CONSOLE" // <--- YOU NEED TO GET THIS!
+    appId: "1:165576518783:web:f3936e64041f24e4cde34a",
+    measurementId: "G-95FNREPXDH"
   },
-  tcgPlayerApiKey: '' // Add your TCGPlayer API key here
+  tcgPlayerApiKey: '' // esto es aparte, te explico abajo
 };

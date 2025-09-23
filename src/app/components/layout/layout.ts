@@ -36,6 +36,7 @@ export class Layout {
     { path: 'expansions', icon: 'collections_bookmark', label: 'Expansions' },
     { path: 'your-cards', icon: 'inventory_2', label: 'Your Cards' },
     { path: 'auth', icon: 'person', label: 'Account' },
-    { path: 'tournament', icon: 'emoji_events', label: 'Tournament' }
+    { path: 'tournament', icon: 'emoji_events', label: 'Tournament' },
+    { path: 'tournament/create-person', icon: 'person_add', label: 'Create Person' }
   ];
 }

@@ -1,4 +1,210 @@
-<div class="tournament">
-  <h1>Tournament</h1>
-  <p>Welcome to the Tournament page. Content coming soon.</p>
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Torneos</h3>
+    <div>
+      <button class="btn btn-primary me-2" (click)="loadTournaments()">Refrescar</button>
+      <button class="btn btn-success" (click)="openModal()">Crear torneo</button>
+    </div>
+  </div>
+
+  <div *ngIf="lastError" class="alert alert-warning">
+    <strong>Error:</strong>
+    <pre class="mb-0">{{ lastError | json }}</pre>
+  </div>
+
+  <div *ngIf="!loading && tournaments && tournaments.length === 0" class="text-muted">No hay torneos.</div>
+
+  <div *ngIf="tournaments && tournaments.length > 0" class="table-responsive">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Fecha</th>
+          <th>Detalle</th>
+          <th>Winners</th>
+          <th>Losers</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let t of tournaments">
+          <tr>
+            <td>{{ t.name || '-' }}</td>
+            <td>{{ t.date || '-' }}</td>
+            <td>{{ t.detail || '-' }}</td>
+            <td>
+              <span *ngIf="t.winners && t.winners.length > 0">{{ formatWinners(t) }}</span>
+              <span *ngIf="!t.winners || t.winners.length === 0">-</span>
+            </td>
+            <td>
+              <span *ngIf="t.losers && t.losers.length > 0">{{ formatLosers(t) }}</span>
+              <span *ngIf="!t.losers || t.losers.length === 0">-</span>
+            </td>
+            <td class="text-end">
+                <div class="d-flex align-items-center justify-content-end">
+                <input type="number" class="form-control form-control-sm me-2" style="width:80px;" [(ngModel)]="t.table_count" [attr.name]="'table_count_'+t.id" title="Mesas" />
+                <button class="btn btn-sm btn-outline-secondary me-2" (click)="setTournamentTableCount(t, t.table_count)">Set mesas</button>
+              </div>
+              <button class="btn btn-sm btn-outline-info me-2" (click)="toggleParticipants(t)">{{ t._showParticipants ? 'Ocultar' : 'Ver' }} participantes</button>
+              <button class="btn btn-sm btn-outline-warning me-2" (click)="openPreview(t)">Comenzar torneo</button>
+              <button class="btn btn-sm btn-outline-primary me-2" (click)="openModal(t)">Editar</button>
+              <button class="btn btn-sm btn-outline-secondary me-2" (click)="openManageParticipants(t)">Gestionar</button>
+              <button class="btn btn-sm btn-outline-danger" (click)="openDeleteModal(t.id, t.name)">Eliminar</button>
+            </td>
+          </tr>
+          <tr *ngIf="t._showParticipants">
+            <td colspan="6" class="bg-light">
+              <div class="d-flex justify-content-end mb-2">
+                <button class="btn btn-sm btn-outline-primary me-2" (click)="t._showLeaderboard = !t._showLeaderboard">{{ t._showLeaderboard ? 'Ocultar ganadores' : 'Ver ganadores' }}</button>
+              </div>
+
+              <div *ngIf="t._showLeaderboard">
+                <div *ngIf="t.leaderboard && t.leaderboard.length > 0" class="mb-2">
+                  <table class="table table-sm mb-0">
+                    <thead>
+                      <tr><th>#</th><th>Jugador</th><th class="text-center">W</th><th class="text-center">L</th><th class="text-center">T</th><th class="text-center">Puntos</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let p of t.leaderboard; let i = index">
+                        <td>{{ i + 1 }}</td>
+                        <td>{{ p.name }}</td>
+                        <td class="text-center">{{ p.w }}</td>
+                        <td class="text-center">{{ p.l }}</td>
+                        <td class="text-center">{{ p.t }}</td>
+                        <td class="text-center"><strong>{{ p.points }}</strong></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div *ngIf="!t.leaderboard || t.leaderboard.length === 0" class="text-muted">No hay datos para el leaderboard.</div>
+              </div>
+
+              <div *ngIf="!t._showLeaderboard">
+                <div *ngIf="t.matches && t.matches.length === 0" class="p-2 text-muted">No hay partidos registrados para este torneo.</div>
+                <div *ngIf="t.matches && t.matches.length > 0" class="mb-0">
+                  <table class="table table-sm mb-0">
+                    <thead>
+                      <tr><th>Mesa</th><th>Ronda</th><th>Jugador 1</th><th>Jugador 2</th><th>Resultado</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let m of t.matches">
+                        <td>{{ m.table_number }}</td>
+                        <td>{{ m.round }}</td>
+                        <td>
+                          {{ m.name1 || m.p1 }}
+                          <small class="text-muted ms-2">({{ getPlayerWLTForTournament(t, m.p1) }})</small>
+                        </td>
+                        <td>
+                          {{ m.name2 || m.p2 }}
+                          <small class="text-muted ms-2">({{ getPlayerWLTForTournament(t, m.p2) }})</small>
+                        </td>
+                        <td>
+                          <span *ngIf="m.tie" class="badge bg-secondary">Empate</span>
+                          <span *ngIf="!m.tie && m.winnerName" class="badge bg-success">Ganador: {{ m.winnerName }}</span>
+                          <span *ngIf="!m.tie && !m.winnerName && m.winner" class="badge bg-success">Ganador: {{ m.winner }}</span>
+                          <span *ngIf="!m.tie && m.loserName" class="badge bg-danger ms-1">Perdedor: {{ m.loserName }}</span>
+                          <span *ngIf="!m.tie && !m.loserName && m.loser" class="badge bg-danger ms-1">Perdedor: {{ m.loser }}</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add / Edit Tournament Modal -->
+  <div class="modal" id="addTournamentModal" tabindex="-1" aria-labelledby="addTournamentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <form #tForm="ngForm" (ngSubmit)="saveTournament(tForm)" novalidate>
+          <div class="modal-header">
+            <h5 class="modal-title" id="addTournamentModalLabel">{{ editingId ? 'Editar torneo' : 'Crear torneo' }}</h5>
+            <button type="button" class="btn-close" (click)="closeModal()" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label class="form-label">Nombre</label>
+                <input class="form-control" name="va_name" [(ngModel)]="formModel.va_name" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Detalle (número)</label>
+                <input class="form-control" name="nm_tournament_detail" [(ngModel)]="formModel.nm_tournament_detail" type="number" />
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label">Fecha del torneo</label>
+                <input class="form-control" name="fe_tournament_date" [(ngModel)]="formModel.fe_tournament_date" type="date" />
+              </div>
+
+              <div *ngIf="message" class="alert alert-info mt-3">{{ message }}</div>
+              <div *ngIf="lastError" class="alert alert-danger mt-3"><pre class="mb-0">{{ lastError | json }}</pre></div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancelar</button>
+            <button type="submit" class="btn btn-primary" [disabled]="saving">{{ saving ? 'Guardando...' : (editingId ? 'Guardar cambios' : 'Crear torneo') }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete confirmation modal -->
+  <div class="modal" id="deleteTournamentModal" tabindex="-1" aria-labelledby="deleteTournamentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deleteTournamentModalLabel">Confirmar eliminación</h5>
+          <button type="button" class="btn-close" (click)="closeDeleteModal()" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>¿Estás seguro de eliminar este torneo?</p>
+          <div *ngIf="message" class="small text-muted">{{ message }}</div>
+          <div *ngIf="lastError" class="alert alert-danger"><pre class="mb-0">{{ lastError | json }}</pre></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeDeleteModal()">Cancelar</button>
+          <button type="button" class="btn btn-danger" (click)="deleteTournamentConfirmed()">Eliminar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage Participants Modal -->
+  <div class="modal" id="manageParticipantsModal" tabindex="-1" aria-labelledby="manageParticipantsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="manageParticipantsModalLabel">Participantes</h5>
+          <button type="button" class="btn-close" (click)="closeManageParticipants()" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Selecciona las personas que participarán en el torneo.</p>
+          <div *ngIf="persons && persons.length === 0" class="text-muted">No hay personas registradas.</div>
+          <div *ngIf="persons && persons.length > 0" class="list-group">
+            <label *ngFor="let person of persons" class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <strong>{{ person.name || 'Sin nombre' }}</strong>
+                <div class="small text-muted">ID: {{ person.id }}</div>
+              </div>
+              <div>
+                <input type="checkbox" [checked]="selectedParticipants.has(person.id)" (change)="togglePersonSelection(person.id, $any($event.target).checked)" />
+              </div>
+            </label>
+          </div>
+          <div *ngIf="lastError" class="alert alert-danger mt-3"><pre class="mb-0">{{ lastError | json }}</pre></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeManageParticipants()">Cerrar</button>
+          <button type="button" class="btn btn-primary" (click)="saveParticipants()">Guardar participantes</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>

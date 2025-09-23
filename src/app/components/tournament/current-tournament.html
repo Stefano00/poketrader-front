@@ -1,0 +1,91 @@
+<div class="container mt-3">
+  <h3>Vista previa del torneo</h3>
+
+  <div class="mb-2">
+  <label class="form-label">Countdown minutos</label>
+  <input type="number" class="form-control" [(ngModel)]="countdownMinutes" min="1" />
+  </div>
+
+  <div class="mb-2 d-flex gap-2">
+    <button class="btn btn-primary" (click)="randomizePairings()">Reordenar</button>
+    <button class="btn btn-success" (click)="startCountdown()">Comenzar</button>
+    <button class="btn btn-secondary" (click)="resetAndRandomize()">Reset</button>
+    <button class="btn btn-outline-secondary" (click)="stopCountdown()">Detener</button>
+    <button class="btn btn-outline-primary" (click)="continueNextRound()">Continuar siguiente ronda</button>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>Pairings</h5>
+      <table class="table table-sm">
+        <thead>
+          <tr><th>Mesa</th><th>Jugador</th><th>Oponente</th><th>Resultado</th><th></th></tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let p of pairings">
+            <!-- alphabetical order row -->
+            <tr>
+              <td rowspan="2">{{ p.table }}</td>
+              <td>
+                {{ getAlphabeticalPair(p)[0].name }}
+                <small class="text-muted ms-2">({{ getPlayerWLT(getAlphabeticalPair(p)[0].id) }})</small>
+              </td>
+              <td>
+                {{ getAlphabeticalPair(p)[1].name }}
+                <small class="text-muted ms-2">({{ getPlayerWLT(getAlphabeticalPair(p)[1].id) }})</small>
+              </td>
+              <td rowspan="2">
+                <div class="btn-group btn-group-sm" role="group">
+                  <input type="radio" class="btn-check" [checked]="getSelection(tableNumber(p)).result === 'p1'" (change)="getSelection(tableNumber(p)).result = 'p1'" id="r1-{{tableNumber(p)}}" name="res-{{tableNumber(p)}}">
+                  <label class="btn btn-outline-success btn-sm" for="r1-{{tableNumber(p)}}">1</label>
+                  <input type="radio" class="btn-check" [checked]="getSelection(tableNumber(p)).result === 'p2'" (change)="getSelection(tableNumber(p)).result = 'p2'" id="r2-{{tableNumber(p)}}" name="res-{{tableNumber(p)}}">
+                  <label class="btn btn-outline-success btn-sm" for="r2-{{tableNumber(p)}}">2</label>
+                  <input type="radio" class="btn-check" [checked]="getSelection(tableNumber(p)).result === 'tie'" (change)="getSelection(tableNumber(p)).result = 'tie'" id="rt-{{tableNumber(p)}}" name="res-{{tableNumber(p)}}">
+                  <label class="btn btn-outline-secondary btn-sm" for="rt-{{tableNumber(p)}}">Empate</label>
+                </div>
+                <div class="mt-2">
+                  <input type="number" class="form-control form-control-sm" style="width:80px; display:inline-block;" [(ngModel)]="getSelection(tableNumber(p)).round" />
+                </div>
+              </td>
+              <td rowspan="2">
+                <div class="d-flex gap-2">
+                  <button class="btn btn-sm btn-outline-primary" (click)="setRound(tableNumber(p))">Aplicar Ronda</button>
+                  <button class="btn btn-sm btn-primary" (click)="saveMatch(p)">Guardar</button>
+                </div>
+              </td>
+            </tr>
+            <!-- mirrored row -->
+            <tr>
+              <td>
+                {{ getAlphabeticalPair(p)[1].name }}
+                <small class="text-muted ms-2">({{ getPlayerWLT(getAlphabeticalPair(p)[1].id) }})</small>
+              </td>
+              <td>
+                {{ getAlphabeticalPair(p)[0].name }}
+                <small class="text-muted ms-2">({{ getPlayerWLT(getAlphabeticalPair(p)[0].id) }})</small>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Fullscreen overlay -->
+<div *ngIf="showFullscreen" class="fullscreen-overlay d-flex align-items-center justify-content-center" (click)="stopCountdown()">
+  <div class="text-center text-white">
+    <h1 style="font-size: 10vw;">{{ displayTime() }}</h1>
+    <p>Presiona Esc o haz click para cerrar</p>
+  </div>
+</div>
+
+<style>
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 1050;
+}
+</style>

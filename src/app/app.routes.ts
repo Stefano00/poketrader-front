@@ -35,6 +35,14 @@ export const routes: Routes = [
     loadComponent: () => import('./components/tournament/tournament').then(m => m.Tournament)
   },
   {
+    path: 'tournament/preview/:id',
+    loadComponent: () => import('./components/tournament/current-tournament').then(m => m.CurrentTournament)
+  },
+  { 
+    path: 'tournament/create-person',
+    loadComponent: () => import('./components/tournament/create-person').then(m => m.CreatePerson)
+  },
+  {
     path: '**',
     redirectTo: 'home'
   }
