@@ -1,12 +1,12 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, JsonPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { getFirestore, collection, getDocs, DocumentData, Timestamp, addDoc, setDoc, doc, serverTimestamp, deleteDoc, query, where, getDoc } from 'firebase/firestore';
 
 @Component({
   selector: 'app-tournament',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, JsonPipe],
   templateUrl: './tournament.html',
   styleUrl: './tournament.scss'
 })
@@ -30,6 +30,8 @@ export class Tournament implements OnInit {
   private modalInstance: any = null;
   private participantsModalInstance: any = null;
   private deleteModalInstance: any = null;
+  // reference to the tournament currently being edited in the modal
+  modalTournament: any = null;
 
   private personCache: Map<string, any> = new Map();
 
@@ -80,6 +82,7 @@ export class Tournament implements OnInit {
           name: data['va_name'] || null,
           date: this.parseDate(data['fe_tournament_date']),
           detail: data['nm_tournament_detail'],
+          finished: !!data['bo_is_finished'],
           raw: data,
           participants: [] as any[],
           sortDate
@@ -167,18 +170,30 @@ export class Tournament implements OnInit {
       document.body.classList.remove('modal-open');
       this.modalInstance = win.bootstrap?.Modal?.getInstance(el) || new win.bootstrap.Modal(el, { backdrop: false });
       if (t) {
+        this.modalTournament = t;
         this.editingId = t.id;
         this.formModel = {
           primaryKey: t.id,
           va_name: (t.raw && t.raw['va_name']) || t.name || '',
           fe_tournament_date: (t.raw && t.raw['fe_tournament_date']) ? (((t.raw['fe_tournament_date'] as any).toDate) ? (t.raw['fe_tournament_date'] as any).toDate().toISOString().slice(0,10) : '') : '',
-          nm_tournament_detail: (t.raw && t.raw['nm_tournament_detail']) || 1
+          nm_tournament_detail: (t.raw && t.raw['nm_tournament_detail']) || 1,
+          table_count: (t.raw && (t.raw['table_count'] ?? t.table_count)) || t.table_count || 0
         };
       } else {
         this.editingId = null;
         // compute next detail id for new tournaments
         const nextDetail = await this.getNextTournamentDetail();
-        this.formModel = { primaryKey: '', va_name: '', fe_tournament_date: '', nm_tournament_detail: nextDetail };
+        this.modalTournament = null;
+        this.formModel = { primaryKey: '', va_name: '', fe_tournament_date: '', nm_tournament_detail: nextDetail, table_count: 0 };
+      }
+      // load persons so the modal can display immediate participant selection
+      await this.loadPersonsForSelection();
+      // initialize selectedParticipants set from existing tournament (when editing)
+      this.selectedParticipants = new Set<string>();
+      if (this.modalTournament && this.modalTournament.participants && this.modalTournament.participants.length > 0) {
+        for (const p of this.modalTournament.participants) {
+          if (p && p.personId) this.selectedParticipants.add(p.personId);
+        }
       }
       this.modalInstance.show();
     } catch (e) {
@@ -193,6 +208,7 @@ export class Tournament implements OnInit {
     setTimeout(() => {
       document.querySelectorAll('.modal-backdrop').forEach(n => n.remove());
       document.body.classList.remove('modal-open');
+      this.modalTournament = null;
     }, 100);
   }
 
@@ -200,6 +216,7 @@ export class Tournament implements OnInit {
     if (!form || form.invalid) return;
     const { primaryKey, va_name, fe_tournament_date } = this.formModel as any;
     let { nm_tournament_detail } = this.formModel as any;
+    const table_count = (this.formModel && (this.formModel.table_count !== undefined)) ? Number(this.formModel.table_count) : undefined;
     const db = getFirestore();
     // if nm_tournament_detail is not provided or falsy, compute next
     if (!nm_tournament_detail) {
@@ -209,6 +226,8 @@ export class Tournament implements OnInit {
       va_name: va_name || null,
       nm_tournament_detail: nm_tournament_detail ? Number(nm_tournament_detail) : 1,
       fe_tournament_date: this.toTimestampFromDateString(fe_tournament_date) || serverTimestamp(),
+      // include table_count when provided
+      ...(table_count !== undefined ? { table_count: Number(table_count) } : {}),
       createdAt: serverTimestamp()
     };
     try {
@@ -224,6 +243,15 @@ export class Tournament implements OnInit {
       } else {
         const ref = await addDoc(collection(db, 'tournament'), docData);
         refId = ref.id;
+      }
+      // persist participant selections immediately after tournament saved
+      try {
+        this.currentTournamentId = refId;
+        if (this.selectedParticipants && this.selectedParticipants.size > 0) {
+          await this.saveParticipants();
+        }
+      } catch (e) {
+        console.warn('Error saving selected participants after tournament save', e);
       }
       this.message = `Torneo guardado: ${refId}`;
       this.editingId = null;
@@ -325,6 +353,15 @@ export class Tournament implements OnInit {
 
   togglePersonSelection(personId: string, checked: boolean) {
     if (checked) this.selectedParticipants.add(personId); else this.selectedParticipants.delete(personId);
+    console.log("Actualizando participantes {}", this.selectedParticipants);
+    
+        try {
+          const newCount = Math.ceil(this.selectedParticipants.size / 2);
+          if (this.formModel) this.formModel.table_count = newCount;
+          // also update modalTournament's participants array for immediate UI reflection
+          this.modalTournament.participants = Array.from(this.selectedParticipants).map(pid => ({ personId: pid }));
+        } catch (e) {}
+      
   }
 
   async saveParticipants() {
@@ -353,6 +390,15 @@ export class Tournament implements OnInit {
       }
 
       this.message = 'Participantes actualizados';
+      // if the participants modal was opened while editing a tournament, update modal form table_count
+      if (this.modalTournament && this.modalTournament.id === this.currentTournamentId) {
+        try {
+          const newCount = Math.ceil(this.selectedParticipants.size / 2);
+          if (this.formModel) this.formModel.table_count = newCount;
+          // also update modalTournament's participants array for immediate UI reflection
+          this.modalTournament.participants = Array.from(this.selectedParticipants).map(pid => ({ personId: pid }));
+        } catch (e) {}
+      }
       this.closeManageParticipants();
     } catch (err) {
       console.error('Error saving participants:', err);

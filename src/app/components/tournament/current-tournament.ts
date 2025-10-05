@@ -2,7 +2,7 @@ import { Component, OnInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { getFirestore, collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, query, where, addDoc, serverTimestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
 
 @Component({
   selector: 'app-current-tournament',
@@ -24,26 +24,88 @@ export class CurrentTournament implements OnInit {
   elapsedSeconds: number = 0;
 
   // selection state for matches keyed by table_number
-  matchSelections: Record<number, { result: 'p1'|'p2'|'tie'|'none', round: number }> = {};
+  // each match stores numeric scores for p1 and p2 (0..2) and round
+  // scores are nullable: each match has per-game winners stored in `games` (length = bestOf)
+  matchSelections: Record<number, { scoreP1: number | null, scoreP2: number | null, round: number, games?: Array<'p1'|'p2'|null> }> = {};
 
   // default round number for saved matches
   round = 1;
+
+  // best_of (number of games per match). Default 3 (best of 3).
+  bestOf = 3;
 
   // W/L/T summary map: personId -> { w: number, l: number, t: number }
   wltMap: Record<string, { w:number, l:number, t:number }> = {};
 
   // UI
   showFullscreen = false;
+  // tournament finished flag (from tournament doc bo_is_finished)
+  tournamentFinished = false;
+  // whether there is at least one saved match for this tournament
+  hasAnySavedMatches = false;
 
   constructor(private route: ActivatedRoute, private router: Router) {}
+
+  goBack() {
+    try {
+      if (window && window.history && window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+    } catch (e) {
+      // ignore
+    }
+  // fallback to navigating to Tournament list
+  try { this.router.navigate(['/tournament']); } catch (e) { console.warn('goBack fallback failed', e); }
+  }
 
   async ngOnInit(): Promise<void> {
     this.tournamentId = this.route.snapshot.paramMap.get('id');
     // if provided, try to load participants; otherwise, empty pairing
     if (this.tournamentId) {
+      await this.loadTournamentMeta();
       await this.loadParticipants(this.tournamentId);
       await this.buildWLTMap();
+      // determine next round based on saved matches in DB
+      try {
+        const { maxRound } = await this.loadPastMatches();
+        this.round = (Number(maxRound || 0) || 0) + 1;
+      } catch (err) {
+        console.warn('Could not determine past rounds, defaulting to 1', err);
+        this.round = 1;
+      }
+      await this.checkHasSavedMatches();
       this.randomizePairings();
+    }
+  }
+
+  // load tournament metadata (bo_is_finished)
+  async loadTournamentMeta() {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const docRef = doc(db, 'tournament', this.tournamentId);
+      const snap = await getDoc(docRef);
+      if (snap && snap.exists()) {
+        const data = snap.data() as any;
+        this.tournamentFinished = !!data['bo_is_finished'];
+      }
+    } catch (err) {
+      console.warn('Could not load tournament meta', err);
+    }
+  }
+
+  // check whether there is at least one saved match for this tournament
+  async checkHasSavedMatches() {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const q = query(collection(db, 'tournament_detail'), where('nm_tournament_id', '==', this.tournamentId));
+      const snap = await getDocs(q);
+      this.hasAnySavedMatches = !!(snap && snap.docs && snap.docs.length > 0);
+    } catch (err) {
+      console.warn('Error checking saved matches', err);
+      this.hasAnySavedMatches = false;
     }
   }
 
@@ -118,6 +180,41 @@ export class CurrentTournament implements OnInit {
     const item = this.wltMap[String(id)];
     if (!item) return '0/0/0';
     return `${item.w}/${item.l}/${item.t}`;
+  }
+
+  gamesRange(): number[] {
+    return Array.from({ length: this.bestOf }, (_, i) => i);
+  }
+
+  // Per-game helpers
+  getGameWinner(table: number, gameIndex: number): 'p1'|'p2'|null {
+    const sel = this.matchSelections[Number(table || 0)];
+    if (!sel || !sel.games) return null;
+    return sel.games[gameIndex] || null;
+  }
+
+  toggleGameWinner(table: number, gameIndex: number, side: 'p1'|'p2') {
+    const k = Number(table || 0);
+    if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
+    const sel = this.matchSelections[k];
+    if (!sel.games) sel.games = Array(this.bestOf).fill(null);
+    // If already selected the same side, clear it; otherwise set to selected side and clear opponent's same label via counts
+    if (sel.games[gameIndex] === side) {
+      sel.games[gameIndex] = null;
+    } else {
+      sel.games[gameIndex] = side;
+    }
+    // recompute totals
+    const p1 = (sel.games || []).filter(g => g === 'p1').length;
+    const p2 = (sel.games || []).filter(g => g === 'p2').length;
+    sel.scoreP1 = p1;
+    sel.scoreP2 = p2;
+  }
+
+  getGamesCount(table: number) {
+    const sel = this.matchSelections[Number(table || 0)];
+    if (!sel || !sel.games) return { p1:0, p2:0 };
+    return { p1: (sel.games || []).filter(g => g === 'p1').length, p2: (sel.games || []).filter(g => g === 'p2').length };
   }
 
   // Continue to next round: randomize pairings avoiding repeat opponents where possible
@@ -200,10 +297,29 @@ export class CurrentTournament implements OnInit {
     this.matchSelections = {};
     for (const p of this.pairings) {
       const tbl = Number(p.table || 0);
-      this.matchSelections[tbl] = { result: 'none', round: nextRound };
+      this.matchSelections[tbl] = { scoreP1: null, scoreP2: null, round: nextRound, games: Array(this.bestOf).fill(null) };
+      (p as any)._saved = false;
     }
     // update internal round
     this.round = nextRound;
+  }
+
+  // can continue to the next round only when current round results have been saved for all tables
+  canContinue(): boolean {
+    if (!this.pairings || this.pairings.length === 0) return false;
+    for (const p of this.pairings) {
+      const tbl = Number(p.table || 0);
+      const sel = this.matchSelections[tbl];
+      if (!sel) return false;
+      if (!(p as any)._saved) return false;
+    }
+    return true;
+  }
+
+  isSaved(p: any): boolean {
+    try {
+      return !!(p && (p as any)._saved);
+    } catch (e) { return false; }
   }
 
   async loadParticipants(tournamentId: string) {
@@ -247,7 +363,8 @@ export class CurrentTournament implements OnInit {
     // initialize selections
     this.matchSelections = {};
     for (const p of this.pairings) {
-      this.matchSelections[p.table || 0] = { result: 'none', round: this.round };
+      this.matchSelections[p.table || 0] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
+      (p as any)._saved = false;
     }
   }
 
@@ -278,9 +395,27 @@ export class CurrentTournament implements OnInit {
   }
 
   resetAndRandomize() {
+    // legacy: full reset and randomize (keeps existing behavior)
     this.stopCountdown();
     this.randomizePairings();
     this.elapsedSeconds = 0;
+  }
+
+  // New: reset only the form (clear per-game selections) without changing round or pairings
+  resetForm() {
+    for (const p of this.pairings) {
+      const tbl = Number(p.table || 0);
+      if (!this.matchSelections[tbl]) {
+        this.matchSelections[tbl] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
+      } else {
+        this.matchSelections[tbl].games = Array(this.bestOf).fill(null);
+        this.matchSelections[tbl].scoreP1 = null;
+        this.matchSelections[tbl].scoreP2 = null;
+        // keep the round value as-is
+      }
+      // mark as not saved since we've cleared the form
+      (p as any)._saved = false;
+    }
   }
 
   // fullscreen exit on Esc
@@ -315,68 +450,245 @@ export class CurrentTournament implements OnInit {
   }
 
   // Save match result to tournament_detail
-  async saveMatch(p: any) {
-    if (!this.tournamentId) return;
-    const sel = this.matchSelections[p.table || 0];
-    if (!sel) return;
-    const db = getFirestore();
-    // determine winner/loser per selection; use displayed alphabetical order mapping
-    const ordered = this.getAlphabeticalPair(p);
-    const first = ordered[0];
-    const second = ordered[1];
-    let winnerId: string | null = null;
-    let loserId: string | null = null;
-    let boTie = false;
-    if (sel.result === 'tie') {
-      boTie = true;
-    } else if (sel.result === 'p1') {
-      // p1 refers to the first displayed (alphabetical) item
-      winnerId = first.id;
-      loserId = second.id;
-    } else if (sel.result === 'p2') {
-      winnerId = second.id;
-      loserId = first.id;
-    } else {
-      // no selection
-      console.warn('No selection for table', p.table);
+  // UI: save modal state for double confirmation
+  showSaveModal = false;
+  saveErrorMessage: string | null = null;
+  // Reset confirmation modal
+  showResetModal = false;
+
+  // Validate whether there are changes to save and whether every table has at least one win recorded
+  hasChanges(): boolean {
+    for (const p of this.pairings) {
+      const tbl = Number(p.table || 0);
+      const sel = this.matchSelections[tbl];
+      if (!sel) continue;
+      const points1 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p1').length || Number(sel.scoreP1 || 0);
+      const points2 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p2').length || Number(sel.scoreP2 || 0);
+      // if any table has some points and not already marked saved => we have changes
+      if ((points1 + points2) > 0 && !(p as any)._saved) return true;
+    }
+    return false;
+  }
+
+  validateAllTables(): { ok: boolean; message?: string } {
+    for (const p of this.pairings) {
+      const tbl = Number(p.table || 0);
+      const sel = this.matchSelections[tbl];
+      if (!sel) return { ok: false, message: `La mesa ${tbl} no tiene resultados` };
+      const points1 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p1').length || Number(sel.scoreP1 || 0);
+      const points2 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p2').length || Number(sel.scoreP2 || 0);
+      if ((points1 + points2) === 0) return { ok: false, message: `La mesa ${tbl} debe tener al menos 1 victoria/derrota` };
+    }
+    return { ok: true };
+  }
+
+  // Entry called by the button: open modal only if validation passes
+  saveAllMatches() {
+    this.saveErrorMessage = null;
+    if (!this.hasChanges()) {
+      this.saveErrorMessage = 'No hay cambios para guardar.';
+      this.showSaveModal = true;
       return;
     }
+    const v = this.validateAllTables();
+    if (!v.ok) {
+      this.saveErrorMessage = v.message || 'Validación falló';
+      this.showSaveModal = true;
+      return;
+    }
+    // open modal for single confirmation
+    this.showSaveModal = true;
+  }
 
-    // map table -> actual pairing personId_1/personId_2: we will persist personId_1 as the first in the original pairing (p.p1)
-    const personId1 = p.p1 ? p.p1.id : null;
-    const personId2 = p.p2 ? p.p2.id : null;
+  // Reset modal handlers
+  openResetModal() {
+    this.showResetModal = true;
+  }
 
-    const docData: any = {
-      nm_tournament_id: this.tournamentId,
-      personId_1: personId1,
-      personId_2: personId2,
-      nm_winner_id: winnerId || null,
-      nm_loser_id: loserId || null,
-      bo_tie: boTie,
-      match_date: serverTimestamp(),
-      round: Number(sel.round || this.round) || 1,
-      table_number: Number(p.table || 0),
-      createdAt: serverTimestamp()
-    };
+  cancelResetModal() {
+    this.showResetModal = false;
+  }
 
+  confirmResetFromModal() {
+    // perform the reset of only the form controls
+    this.resetForm();
+    this.showResetModal = false;
+  }
+
+  // Finalize tournament modal state & handlers
+  showFinalizeModal = false;
+  openFinalizeModal() {
+    this.showFinalizeModal = true;
+  }
+  cancelFinalizeModal() {
+    this.showFinalizeModal = false;
+  }
+
+  // perform finalize: set bo_is_finished = true on tournament doc
+  async confirmFinalizeFromModal() {
+    if (!this.tournamentId) return;
     try {
-      await addDoc(collection(db, 'tournament_detail'), docData);
-      console.info('Match saved for table', p.table);
-      // optionally mark saved state
-      (p as any)._saved = true;
-      // refresh W/L/T map so summaries update
-      await this.buildWLTMap();
+      // if there are unsaved changes, save them first
+      if (this.hasChanges()) {
+        await this.performSaveAllMatches();
+      }
+      const db = getFirestore();
+      const tRef = doc(db, 'tournament', this.tournamentId);
+      await updateDoc(tRef, { bo_is_finished: true });
+      this.tournamentFinished = true;
     } catch (err) {
-      console.error('Error saving match:', err);
+      console.error('Error finalizing tournament', err);
+    } finally {
+      this.showFinalizeModal = false;
     }
   }
 
-  getSelection(table: number) {
-    const k = Number(table || 0);
-    if (!this.matchSelections[k]) {
-      this.matchSelections[k] = { result: 'none', round: this.round };
+  // finalize without saving current unsaved changes
+  async finalizeWithoutSaving() {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const tRef = doc(db, 'tournament', this.tournamentId);
+      await updateDoc(tRef, { bo_is_finished: true });
+      this.tournamentFinished = true;
+    } catch (err) {
+      console.error('Error finalizing tournament', err);
+    } finally {
+      this.showFinalizeModal = false;
     }
-    return this.matchSelections[k];
+  }
+
+  // final confirmation from modal (single step)
+  async confirmSaveFromModal() {
+    await this.performSaveAllMatches();
+    this.showSaveModal = false;
+    this.saveErrorMessage = null;
+  }
+
+  cancelSaveModal() {
+  this.showSaveModal = false;
+  this.saveErrorMessage = null;
+  }
+
+  // Actual saving logic (used after final confirmation)
+  async performSaveAllMatches() {
+    if (!this.tournamentId) return;
+    if (this.tournamentFinished) {
+      console.warn('Tournament is finished; cannot save matches.');
+      return;
+    }
+    const db = getFirestore();
+    let saved = 0;
+    for (const p of this.pairings) {
+      const tbl = Number(p.table || 0);
+      const sel = this.matchSelections[tbl];
+      if (!sel) continue;
+      // Determine points per player
+      let points1 = 0;
+      let points2 = 0;
+      if ((sel as any).games && Array.isArray((sel as any).games)) {
+        for (const g of (sel as any).games) {
+          if (g === 'p1' || g === 1) points1++;
+          else if (g === 'p2' || g === 2) points2++;
+        }
+      } else {
+        points1 = Number(sel.scoreP1 ?? 0);
+        points2 = Number(sel.scoreP2 ?? 0);
+      }
+
+      let winnerId: string | null = null;
+      let loserId: string | null = null;
+      let boTie = false;
+      if (points1 > points2) { winnerId = p.p1 ? p.p1.id : null; loserId = p.p2 ? p.p2.id : null; }
+      else if (points2 > points1) { winnerId = p.p2 ? p.p2.id : null; loserId = p.p1 ? p.p1.id : null; }
+      else { boTie = true; }
+
+      const personId1 = p.p1 ? p.p1.id : null;
+      const personId2 = p.p2 ? p.p2.id : null;
+
+      const docData: any = {
+        nm_tournament_id: this.tournamentId,
+        personId_1: personId1,
+        personId_2: personId2,
+        nm_winner_id: winnerId || null,
+        nm_loser_id: loserId || null,
+        nm_point_per_1: points1,
+        nm_point_per_2: points2,
+        bo_tie: boTie,
+        match_date: serverTimestamp(),
+        round: Number(sel.round || this.round) || 1,
+        table_number: tbl,
+        createdAt: serverTimestamp()
+      };
+      try {
+        // try to find existing entry for this tournament/round/table
+        const q = query(
+          collection(db, 'tournament_detail'),
+          where('nm_tournament_id', '==', this.tournamentId),
+          where('round', '==', Number(sel.round || this.round) || 1),
+          where('table_number', '==', tbl)
+        );
+        const existing = await getDocs(q);
+        if (existing && existing.docs && existing.docs.length > 0) {
+          // update the first matching document (idempotent)
+          const docRef = existing.docs[0].ref;
+          // don't overwrite original createdAt when updating
+          const updateData = Object.assign({}, docData);
+          delete updateData.createdAt;
+          await updateDoc(docRef, updateData);
+        } else {
+          // create new document
+          await addDoc(collection(db, 'tournament_detail'), docData);
+        }
+        (p as any)._saved = true;
+        saved++;
+      } catch (err) {
+        console.error('Error saving match for table', tbl, err);
+      }
+    }
+    if (saved > 0) {
+      console.info('Saved matches:', saved);
+      await this.buildWLTMap();
+      // refresh saved-match indicator and tournament meta
+      await this.checkHasSavedMatches();
+      await this.loadTournamentMeta();
+    }
+  }
+
+  // helpers to safely access/set scores from template
+  getScore(table: number, side: 'p1'|'p2'): number {
+    const k = Number(table || 0);
+    const sel = this.matchSelections[k];
+    if (!sel) return 0;
+    return side === 'p1' ? Number(sel.scoreP1 || 0) : Number(sel.scoreP2 || 0);
+  }
+
+  setScore(table: number, side: 'p1'|'p2', value: number) {
+    const k = Number(table || 0);
+    if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: 0, scoreP2: 0, round: this.round };
+    const val = Number(value ?? 0);
+    // When selecting a value for one player, clear the same-value radio on the opponent.
+    if (side === 'p1') {
+      this.matchSelections[k].scoreP1 = val;
+      // if opponent had same value, clear it
+      if (this.matchSelections[k].scoreP2 === val) this.matchSelections[k].scoreP2 = null;
+    } else {
+      this.matchSelections[k].scoreP2 = val;
+      if (this.matchSelections[k].scoreP1 === val) this.matchSelections[k].scoreP1 = null;
+    }
+  }
+
+  // round helpers (work with the numeric score shape)
+  getRoundValue(table: number): number {
+    const k = Number(table || 0);
+    if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: 0, scoreP2: 0, round: this.round };
+    return Number(this.matchSelections[k].round || this.round || 1);
+  }
+
+  setRoundValue(table: number, value: number) {
+    const k = Number(table || 0);
+    if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: 0, scoreP2: 0, round: this.round };
+    this.matchSelections[k].round = Number(value || this.round || 1);
   }
 
   tableNumber(p: any): number {
@@ -388,11 +700,13 @@ export class CurrentTournament implements OnInit {
     if (t === 0) {
       // apply to all
       for (const k of Object.keys(this.matchSelections)) {
-        this.matchSelections[Number(k)].round = Number(this.round || 1);
+        const idx = Number(k);
+        if (this.matchSelections[idx]) this.matchSelections[idx].round = Number(this.round || 1);
       }
     } else {
-      const sel = this.getSelection(t);
-      sel.round = Number(sel.round || this.round || 1);
+      const k = Number(t || 0);
+      if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: 0, scoreP2: 0, round: this.round };
+      this.matchSelections[k].round = Number(this.matchSelections[k].round || this.round || 1);
     }
   }
 }

@@ -29,7 +29,10 @@
       <tbody>
         <ng-container *ngFor="let t of tournaments">
           <tr>
-            <td>{{ t.name || '-' }}</td>
+              <td>
+                {{ t.name || '-' }}
+                <span *ngIf="t.finished" class="badge bg-danger ms-2">Finalizado</span>
+              </td>
             <td>{{ t.date || '-' }}</td>
             <td>{{ t.detail || '-' }}</td>
             <td>
@@ -41,14 +44,12 @@
               <span *ngIf="!t.losers || t.losers.length === 0">-</span>
             </td>
             <td class="text-end">
-                <div class="d-flex align-items-center justify-content-end">
-                <input type="number" class="form-control form-control-sm me-2" style="width:80px;" [(ngModel)]="t.table_count" [attr.name]="'table_count_'+t.id" title="Mesas" />
-                <button class="btn btn-sm btn-outline-secondary me-2" (click)="setTournamentTableCount(t, t.table_count)">Set mesas</button>
+              <div class="d-flex align-items-center justify-content-end">
+                <button class="btn btn-sm btn-outline-info me-2" (click)="toggleParticipants(t)">{{ t._showParticipants ? 'Ocultar' : 'Ver' }} participantes</button>
+                <button class="btn btn-sm btn-outline-warning me-2" (click)="openPreview(t)">Comenzar torneo</button>
+                <button class="btn btn-sm btn-outline-primary me-2" (click)="openModal(t)">Editar</button>
+                <!-- Gestionar moved inside Edit modal -->
               </div>
-              <button class="btn btn-sm btn-outline-info me-2" (click)="toggleParticipants(t)">{{ t._showParticipants ? 'Ocultar' : 'Ver' }} participantes</button>
-              <button class="btn btn-sm btn-outline-warning me-2" (click)="openPreview(t)">Comenzar torneo</button>
-              <button class="btn btn-sm btn-outline-primary me-2" (click)="openModal(t)">Editar</button>
-              <button class="btn btn-sm btn-outline-secondary me-2" (click)="openManageParticipants(t)">Gestionar</button>
               <button class="btn btn-sm btn-outline-danger" (click)="openDeleteModal(t.id, t.name)">Eliminar</button>
             </td>
           </tr>
@@ -133,13 +134,33 @@
                 <input class="form-control" name="va_name" [(ngModel)]="formModel.va_name" required />
               </div>
               <div class="col-md-4">
-                <label class="form-label">Detalle (número)</label>
+                <label class="form-label">Número de torneo</label>
                 <input class="form-control" name="nm_tournament_detail" [(ngModel)]="formModel.nm_tournament_detail" type="number" />
               </div>
 
               <div class="col-md-6">
                 <label class="form-label">Fecha del torneo</label>
                 <input class="form-control" name="fe_tournament_date" [(ngModel)]="formModel.fe_tournament_date" type="date" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Mesas</label>
+                <input class="form-control" name="table_count" [(ngModel)]="formModel.table_count" type="number" disabled />
+              </div>
+
+              <div class="col-12">
+                <label class="form-label">Participantes</label>
+                <div *ngIf="persons && persons.length === 0" class="text-muted">No hay personas registradas.</div>
+                <div *ngIf="persons && persons.length > 0" class="list-group">
+                  <label *ngFor="let person of persons" class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{{ person.name || 'Sin nombre' }}</strong>
+                      <div class="small text-muted">Alias: {{ person.raw.va_nickname }}</div>
+                    </div>
+                    <div>
+                      <input type="checkbox" [checked]="selectedParticipants.has(person.id)" (change)="togglePersonSelection(person.id, $any($event.target).checked)" />
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div *ngIf="message" class="alert alert-info mt-3">{{ message }}</div>
@@ -148,6 +169,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancelar</button>
+            <button type="button" class="btn btn-outline-secondary me-auto" (click)="openManageParticipants(modalTournament)" *ngIf="modalTournament">Gestionar participantes</button>
             <button type="submit" class="btn btn-primary" [disabled]="saving">{{ saving ? 'Guardando...' : (editingId ? 'Guardar cambios' : 'Crear torneo') }}</button>
           </div>
         </form>
