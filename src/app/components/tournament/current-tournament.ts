@@ -2,7 +2,7 @@ import { Component, OnInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { getFirestore, collection, getDocs, query, where, addDoc, serverTimestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, query, where, addDoc, serverTimestamp, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 
 @Component({
   selector: 'app-current-tournament',
@@ -22,6 +22,11 @@ export class CurrentTournament implements OnInit {
   startTime: number | null = null;
   intervalId: any = null;
   elapsedSeconds: number = 0;
+  // heartbeat persistence
+  private lastHeartbeatMs: number | null = null;
+  private persistedStart: boolean = false;
+  // UI update interval for display (separate from heartbeat)
+  private displayIntervalId: any = null;
 
   // selection state for matches keyed by table_number
   // each match stores numeric scores for p1 and p2 (0..2) and round
@@ -76,6 +81,8 @@ export class CurrentTournament implements OnInit {
       }
       await this.checkHasSavedMatches();
       this.randomizePairings();
+      // try to restore countdown from persistence
+      await this.loadCountdownState();
     }
   }
 
@@ -302,6 +309,9 @@ export class CurrentTournament implements OnInit {
     }
     // update internal round
     this.round = nextRound;
+    
+    // Reset countdown for new round
+    this.resetCountdownForNewRound();
   }
 
   // can continue to the next round only when current round results have been saved for all tables
@@ -370,9 +380,18 @@ export class CurrentTournament implements OnInit {
 
   // controls
   startCountdown() {
-    if (this.running) return;
+    if (this.running) {
+      // If already running, just show fullscreen
+      this.showFullscreen = true;
+      return;
+    }
     this.running = true;
-    this.startTime = Date.now();
+    // If we have a persisted start, reuse it; otherwise set and persist
+    if (!this.startTime) this.startTime = Date.now();
+    // persist start if not already persisted
+    if (!this.persistedStart) {
+      void this.persistCountdownStart().catch(() => {});
+    }
     this.showFullscreen = true;
     this.intervalId = setInterval(() => {
       const now = Date.now();
@@ -380,18 +399,54 @@ export class CurrentTournament implements OnInit {
       const total = (Number(this.countdownMinutes) || 0) * 60;
       // remaining seconds (can be negative)
       const remaining = total - diff;
-      // store remaining in elapsed for display via helper
-      (this as any).elapsedSeconds = remaining;
+      // minute heartbeat persistence
+      if (this.tournamentId) {
+        if (this.lastHeartbeatMs === null) this.lastHeartbeatMs = now;
+        if ((now - (this.lastHeartbeatMs || 0)) >= 10_000) {
+          this.lastHeartbeatMs = now;
+          void this.persistCountdownHeartbeat(remaining).catch(() => {});
+        }
+      }
+      // auto-stop when reaches -15:00 or less
+      if (remaining <= -15 * 60) {
+        this.stopCountdown('expired');
+      }
     }, 200);
+    
+    // Start display update interval (every second for UI)
+    this.startDisplayUpdate();
   }
 
-  stopCountdown() {
+  stopCountdown(status: 'stopped' | 'expired' = 'stopped') {
     this.running = false;
     this.showFullscreen = false;
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    // Stop display update interval
+    this.stopDisplayUpdate();
+    // persist stop state
+    void this.persistCountdownStop(status).catch(() => {});
+  }
+
+  // Close fullscreen but keep countdown running
+  closeFullscreen() {
+    this.showFullscreen = false;
+    // Keep everything else running
+  }
+
+  // Reset countdown for new round
+  resetCountdownForNewRound() {
+    // Stop current countdown
+    this.stopCountdown('stopped');
+    // Reset countdown state
+    this.startTime = null;
+    this.elapsedSeconds = 0;
+    this.persistedStart = false;
+    this.lastHeartbeatMs = null;
+    // Clear any existing countdown data for this tournament
+    void this.clearCountdownState().catch(() => {});
   }
 
   resetAndRandomize() {
@@ -422,17 +477,143 @@ export class CurrentTournament implements OnInit {
   @HostListener('window:keydown', ['$event'])
   onKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      this.stopCountdown();
+      this.closeFullscreen();
     }
   }
 
   // helper to display elapsed seconds (can be negative)
   displaySeconds(): number {
-    return (this as any).elapsedSeconds || 0;
+    return this.elapsedSeconds || 0;
+  }
+
+  // ===== Countdown persistence (Firestore: current_tournament/{tournamentId}) =====
+  private async loadCountdownState() {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const ref = doc(db, 'current_tournament', this.tournamentId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const data = snap.data() as any;
+      const savedRound = Number(data.round || 0);
+      // Only load countdown if it's for the current round
+      if (savedRound !== this.round) return;
+      
+      const running = !!data.running;
+      const totalSeconds = Number(data.totalSeconds || (Number(this.countdownMinutes) || 0) * 60) || 0;
+      const startAtMs = Number(data.startAtMs || 0) || 0;
+      const lastRemainingSeconds = Number(data.lastRemainingSeconds || 0);
+      const lastUpdatedAtMs = Number(data.lastUpdatedAtMs || 0) || 0;
+      // prefer computing from startAtMs if available; fallback to lastRemainingSeconds + lastUpdatedAtMs
+      let remaining = 0;
+      if (startAtMs && totalSeconds) {
+        const now = Date.now();
+        const diff = Math.floor((now - startAtMs) / 1000);
+        remaining = totalSeconds - diff;
+      } else if (lastUpdatedAtMs) {
+        const now = Date.now();
+        const drift = Math.floor((now - lastUpdatedAtMs) / 1000);
+        remaining = lastRemainingSeconds - drift;
+      }
+      // restore minutes if saved
+      if (data.countdownMinutes != null) this.countdownMinutes = Number(data.countdownMinutes) || this.countdownMinutes;
+      if (running) {
+        // restore startTime to align with server state so the local timer continues accurately
+        if (startAtMs) this.startTime = Number(startAtMs);
+        this.persistedStart = true;
+        this.startCountdown();
+      } else {
+        // Even if not running, start display update to show the stopped time
+        this.startDisplayUpdate();
+      }
+    } catch (err) {
+      // ignore load errors; countdown will remain local
+    }
+  }
+
+  private async clearCountdownState() {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const ref = doc(db, 'current_tournament', this.tournamentId);
+      await setDoc(ref, {
+        nm_tournament_id: this.tournamentId,
+        round: this.round,
+        running: false,
+        status: 'cleared',
+        clearedAt: serverTimestamp(),
+        clearedAtMs: Date.now()
+      }, { merge: true });
+    } catch (err) {
+      // swallow
+    }
+  }
+
+  private async persistCountdownStart() {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const ref = doc(db, 'current_tournament', this.tournamentId);
+      const totalSeconds = (Number(this.countdownMinutes) || 0) * 60;
+      await setDoc(ref, {
+        nm_tournament_id: this.tournamentId,
+        round: this.round,
+        countdownMinutes: Number(this.countdownMinutes) || 0,
+        totalSeconds,
+        startAtMs: this.startTime || Date.now(),
+        running: true,
+        status: 'running',
+        lastRemainingSeconds: totalSeconds,
+        lastUpdatedAt: serverTimestamp(),
+        lastUpdatedAtMs: Date.now()
+      }, { merge: true });
+      this.persistedStart = true;
+      this.lastHeartbeatMs = Date.now();
+    } catch (err) {
+      // swallow
+    }
+  }
+
+  private async persistCountdownHeartbeat(remainingSeconds: number) {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const ref = doc(db, 'current_tournament', this.tournamentId);
+      await setDoc(ref, {
+        round: this.round,
+        running: true,
+        status: 'running',
+        lastRemainingSeconds: Math.floor(remainingSeconds),
+        lastUpdatedAt: serverTimestamp(),
+        lastUpdatedAtMs: Date.now()
+      }, { merge: true });
+    } catch (err) {
+      // ignore transient errors
+    }
+  }
+
+  private async persistCountdownStop(status: 'stopped' | 'expired') {
+    if (!this.tournamentId) return;
+    try {
+      const db = getFirestore();
+      const ref = doc(db, 'current_tournament', this.tournamentId);
+      await setDoc(ref, {
+        round: this.round,
+        running: false,
+        status,
+        stoppedAt: serverTimestamp(),
+        stoppedAtMs: Date.now(),
+        lastRemainingSeconds: Math.floor(this.elapsedSeconds || 0),
+        lastUpdatedAt: serverTimestamp(),
+        lastUpdatedAtMs: Date.now()
+      }, { merge: true });
+    } catch (err) {
+      // swallow
+    }
   }
 
   displayTime(): string {
-    const sec = Math.floor((this as any).elapsedSeconds || 0);
+    const sec = Math.floor(this.elapsedSeconds || 0);
     const neg = sec < 0;
     const s = Math.abs(sec);
     const mm = Math.floor(s / 60);
@@ -532,6 +713,10 @@ export class CurrentTournament implements OnInit {
       if (this.hasChanges()) {
         await this.performSaveAllMatches();
       }
+      
+      // Stop countdown when tournament is finalized
+      this.stopCountdown('stopped');
+      
       const db = getFirestore();
       const tRef = doc(db, 'tournament', this.tournamentId);
       await updateDoc(tRef, { bo_is_finished: true });
@@ -547,6 +732,9 @@ export class CurrentTournament implements OnInit {
   async finalizeWithoutSaving() {
     if (!this.tournamentId) return;
     try {
+      // Stop countdown when tournament is finalized
+      this.stopCountdown('stopped');
+      
       const db = getFirestore();
       const tRef = doc(db, 'tournament', this.tournamentId);
       await updateDoc(tRef, { bo_is_finished: true });
@@ -707,6 +895,31 @@ export class CurrentTournament implements OnInit {
       const k = Number(t || 0);
       if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: 0, scoreP2: 0, round: this.round };
       this.matchSelections[k].round = Number(this.matchSelections[k].round || this.round || 1);
+    }
+  }
+
+  // ===== Display Update Methods =====
+  private startDisplayUpdate() {
+    // Clear any existing display interval
+    this.stopDisplayUpdate();
+    // Update display every second for smooth UI updates
+    this.displayIntervalId = setInterval(() => {
+      // Always update display as long as we have a startTime
+      if (this.startTime) {
+        const now = Date.now();
+        const diff = Math.floor((now - this.startTime) / 1000);
+        const total = (Number(this.countdownMinutes) || 0) * 60;
+        const remaining = total - diff;
+        // Update the property that the template uses
+        this.elapsedSeconds = remaining;
+      }
+    }, 1000);
+  }
+
+  private stopDisplayUpdate() {
+    if (this.displayIntervalId) {
+      clearInterval(this.displayIntervalId);
+      this.displayIntervalId = null;
     }
   }
 }

@@ -15,6 +15,15 @@
   <div class="mb-2">
   <label class="form-label">Countdown minutos</label>
   <input type="number" class="form-control" [(ngModel)]="countdownMinutes" min="1" />
+  <!-- Persistent countdown display -->
+  <div *ngIf="running || displaySeconds() !== 0" class="mt-2">
+    <div class="alert" [class.alert-info]="displaySeconds() > 0" [class.alert-warning]="displaySeconds() <= 0 && displaySeconds() > -900" [class.alert-danger]="displaySeconds() <= -900">
+      <div class="d-flex justify-content-between align-items-center">
+        <span><strong>Countdown:</strong> {{ displayTime() }}</span>
+        <span *ngIf="running" class="badge bg-success">En curso</span>
+      </div>
+    </div>
+  </div>
   </div>
 
   <div class="mb-2 d-flex gap-2">
@@ -32,20 +41,20 @@
       <h5>Pairings</h5>
       <table class="table table-sm">
         <thead>
-          <tr><th>Mesa</th><th>Ronda</th><th>Jugador</th><th>Oponente</th><th>Resultado</th></tr>
+          <tr><th>Ronda</th><th>Mesa</th><th>Jugador</th><th>Oponente</th><th>Resultado</th></tr>
         </thead>
         <tbody>
           <ng-container *ngFor="let p of pairings">
             <!-- per-match 3-game UI follows -->
               <tr>
+                <td rowspan="2" class="align-middle">
+                  <label class="form-label mb-0">Ronda</label>
+                  <input type="number" class="form-control form-control-sm" style="width:80px; display:inline-block;" [value]="getRoundValue(tableNumber(p))" readonly />
+                </td>
                 <td rowspan="2" class="align-middle text-center">
                   {{ p.table }}
                   <div *ngIf="isSaved(p)" class="badge bg-success ms-1">Guardada</div>
                   <div *ngIf="!isSaved(p)" class="badge bg-secondary ms-1">Pendiente</div>
-                </td>
-                <td rowspan="2" class="align-middle">
-                  <label class="form-label mb-0">Ronda</label>
-                  <input type="number" class="form-control form-control-sm" style="width:80px; display:inline-block;" [value]="getRoundValue(tableNumber(p))" readonly />
                 </td>
                 <td>{{ getAlphabeticalPair(p)[0].name }} <small class="text-muted">({{ getPlayerWLT(getAlphabeticalPair(p)[0].id) }})</small></td>
                 <td>{{ getAlphabeticalPair(p)[1].name }} <small class="text-muted">({{ getPlayerWLT(getAlphabeticalPair(p)[1].id) }})</small></td>
@@ -82,7 +91,7 @@
 </div>
 
 <!-- Fullscreen overlay -->
-<div *ngIf="showFullscreen" class="fullscreen-overlay d-flex align-items-center justify-content-center" (click)="stopCountdown()">
+<div *ngIf="showFullscreen" class="fullscreen-overlay d-flex align-items-center justify-content-center" (click)="closeFullscreen()">
   <div class="text-center text-white">
     <h1 style="font-size: 10vw;">{{ displayTime() }}</h1>
     <p>Presiona Esc o haz click para cerrar</p>

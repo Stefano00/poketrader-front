@@ -1,23 +1,226 @@
+// Variables for consistent theming
+$sidenav-width: 280px;
+$sidenav-width-mobile: 260px;
+$toolbar-height: 64px;
+$border-radius: 8px;
+$transition-duration: 0.3s;
+$shadow-light: 0 2px 8px rgba(0, 0, 0, 0.1);
+$shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.15);
+
 .sidenav-container {
-  height: 100%;
+  height: 100vh;
+  width: 100%;
+  position: relative;
 }
 
 .sidenav {
-  width: 250px;
+  width: $sidenav-width;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: $shadow-light;
+  // Smooth transitions
+  transition: transform $transition-duration cubic-bezier(0.25, 0.8, 0.25, 1);
+  
+  // Mobile-specific styles
+  @media (max-width: 768px) {
+    width: $sidenav-width-mobile;
+    box-shadow: $shadow-medium;
+  }
 }
 
-.sidenav .mat-toolbar {
+.sidenav-toolbar {
   background: inherit;
-}
-
-.mat-toolbar.mat-primary {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-mat-toolbar {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 0 16px;
+  min-height: $toolbar-height;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  
+  .menu-title {
+    font-weight: 500;
+    font-size: 1.1rem;
+    color: rgba(0, 0, 0, 0.87);
+  }
+  
+  .close-button {
+    color: rgba(0, 0, 0, 0.6);
+    transition: color $transition-duration ease;
+    
+    &:hover {
+      color: rgba(0, 0, 0, 0.87);
+      background-color: rgba(0, 0, 0, 0.04);
+    }
+  }
 }
+
+.nav-list {
+  padding: 8px 0;
+  
+  .nav-item {
+    margin: 4px 8px;
+    border-radius: $border-radius;
+    transition: all $transition-duration ease;
+    position: relative;
+    overflow: hidden;
+    
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.04);
+      transform: translateX(4px);
+    }
+    
+    &:active {
+      background-color: rgba(0, 0, 0, 0.08);
+    }
+    
+    // Active route styling
+    &.mat-list-item-active {
+      background-color: rgba(25, 118, 210, 0.12);
+      color: #1976d2;
+      
+      .nav-icon {
+        color: #1976d2;
+      }
+      
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background-color: #1976d2;
+        border-radius: 0 2px 2px 0;
+      }
+    }
+    
+    .nav-icon {
+      margin-right: 16px;
+      color: rgba(0, 0, 0, 0.6);
+      transition: color $transition-duration ease;
+    }
+    
+    .nav-label {
+      font-weight: 400;
+      font-size: 0.95rem;
+      transition: color $transition-duration ease;
+    }
+  }
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: $shadow-light;
+  padding: 0 16px;
+  min-height: $toolbar-height;
+  
+  .menu-button {
+    margin-right: 16px;
+    transition: all $transition-duration ease;
+    
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      transform: scale(1.05);
+    }
+  }
+  
+  .app-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  background-color: #fafafa;
+  min-height: calc(100vh - #{$toolbar-height});
+  
+  // Responsive padding
+  @media (max-width: 768px) {
+    padding: 16px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 12px;
+  }
+}
+
+// Responsive breakpoints
+@media (max-width: 1024px) {
+  .sidenav {
+    width: $sidenav-width-mobile;
+  }
+}
+
+@media (max-width: 768px) {
+  .content {
+    padding: 16px;
+  }
+  
+  .nav-list .nav-item {
+    margin: 2px 4px;
+    
+    &:hover {
+      transform: none; // Disable transform on mobile for better touch experience
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .content {
+    padding: 12px;
+  }
+  
+  .main-toolbar {
+    padding: 0 8px;
+    
+    .app-title {
+      font-size: 1.1rem;
+    }
+  }
+  
+  .sidenav-toolbar {
+    padding: 0 12px;
+    
+    .menu-title {
+      font-size: 1rem;
+    }
+  }
+}
+
+
+// Accessibility improvements
+@media (prefers-reduced-motion: reduce) {
+  .sidenav,
+  .nav-item,
+  .menu-button,
+  .close-button {
+    transition: none;
+  }
+  
+  .nav-item:hover {
+    transform: none;
+  }
+}
+
+// Focus styles for better accessibility
+.nav-item:focus-visible,
+.menu-button:focus-visible,
+.close-button:focus-visible {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+

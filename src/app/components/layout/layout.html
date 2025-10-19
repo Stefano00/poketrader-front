@@ -1,31 +1,66 @@
 <mat-sidenav-container class="sidenav-container">
-  <mat-sidenav #drawer class="sidenav" fixedInViewport
-      [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
-      [mode]="(isHandset$ | async) ? 'over' : 'side'"
-      [opened]="(isHandset$ | async) === false">
-    <mat-toolbar>Menu</mat-toolbar>
-    <mat-nav-list>
+  <mat-sidenav
+    #drawer
+    class="sidenav"
+    fixedInViewport
+    [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
+    [mode]="(isHandset$ | async) ? 'over' : 'side'"
+    [disableClose]="!(isHandset$ | async)"
+  >
+    <mat-toolbar class="sidenav-toolbar">
+      <span class="menu-title">Menu</span>
+      @if (isHandset$ | async) {
+        <button
+          type="button"
+          aria-label="Close menu"
+          mat-icon-button
+          class="close-button"
+          (click)="drawer.close()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-toolbar>
+    
+    <mat-nav-list class="nav-list">
       @for (item of menuItems; track item.path) {
-        <a mat-list-item [routerLink]="item.path">
-          <mat-icon matListItemIcon>{{item.icon}}</mat-icon>
-          <span matListItemTitle>{{item.label}}</span>
+        <a
+          mat-list-item
+          [routerLink]="item.path"
+          class="nav-item"
+          (click)="closeDrawer()"
+          [attr.aria-label]="'Navigate to ' + item.label"
+        >
+          <mat-icon matListItemIcon class="nav-icon">{{ item.icon }}</mat-icon>
+          <span matListItemTitle class="nav-label">{{ item.label }}</span>
         </a>
       }
     </mat-nav-list>
   </mat-sidenav>
-  <mat-sidenav-content>
-    <mat-toolbar color="primary">
+
+  <mat-sidenav-content class="main-content">
+    <mat-toolbar color="primary" class="main-toolbar">
       @if (isHandset$ | async) {
         <button
           type="button"
-          aria-label="Toggle sidenav"
+          aria-label="Open navigation menu"
           mat-icon-button
-          (click)="drawer.toggle()">
-          <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
+          class="menu-button"
+          (click)="toggleDrawer()"
+        >
+          <mat-icon>menu</mat-icon>
         </button>
       }
-      <span>PokéTrader</span>
+      <span class="app-title">PokéTrader</span>
+      
+      <!-- Spacer to push content to the right -->
+      <span class="spacer"></span>
+      
+      <!-- Optional: Add user menu or other toolbar actions here -->
     </mat-toolbar>
-    <router-outlet></router-outlet>
+
+    <div class="content">
+      <router-outlet></router-outlet>
+    </div>
   </mat-sidenav-content>
 </mat-sidenav-container>
