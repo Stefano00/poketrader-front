@@ -1,9 +1,9 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { Component, inject, ViewChild, HostListener, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, inject, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
-import { MatSidenavModule, MatSidenav, MatSidenavContainer } from '@angular/material/sidenav';
+import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -27,10 +27,10 @@ import { Observable, Subject } from 'rxjs';
 })
 export class Layout implements AfterViewInit, OnDestroy {
   @ViewChild('drawer', { static: false }) drawer!: MatSidenav;
-  @ViewChild(MatSidenavContainer, { static: false }) container!: MatSidenavContainer;
   
   private breakpointObserver = inject(BreakpointObserver);
   private destroy$ = new Subject<void>();
+  private isHandsetSnapshot = false;
   
   isHandset$: Observable<boolean> = this.breakpointObserver
     .observe(Breakpoints.Handset)
@@ -50,24 +50,21 @@ export class Layout implements AfterViewInit, OnDestroy {
   ];
 
   ngAfterViewInit(): void {
-    // Debug: Log the handset state
-    this.isHandset$.pipe(takeUntil(this.destroy$)).subscribe(isHandset => {
-      console.log('Is handset (mobile):', isHandset);
-    });
-    
-    // Ensure drawer is available after view init and set initial state
-    setTimeout(() => {
-      console.log('Drawer after timeout:', this.drawer);
-      if (this.drawer) {
-        this.isHandset$.pipe(takeUntil(this.destroy$)).subscribe(isHandset => {
-          if (isHandset) {
-            this.drawer.close();
-          } else {
-            this.drawer.open();
-          }
-        });
-      }
-    }, 100);
+    this.isHandset$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(isHandset => {
+        this.isHandsetSnapshot = isHandset;
+        if (!this.drawer) {
+          return;
+        }
+        if (isHandset) {
+          // On mobile we use over mode and keep the drawer closed by default
+          this.drawer.close();
+        } else {
+          // On larger screens keep the drawer open for a classic sidebar
+          this.drawer.open();
+        }
+      });
   }
 
   ngOnDestroy(): void {
@@ -76,39 +73,11 @@ export class Layout implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Handle click outside the drawer to close it on mobile
-   */
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: Event): void {
-    this.isHandset$.pipe(takeUntil(this.destroy$)).subscribe(isHandset => {
-      if (isHandset && this.drawer && this.drawer.opened) {
-        const target = event.target as HTMLElement;
-        const drawerElement = document.querySelector('mat-sidenav');
-        const toolbarElement = document.querySelector('mat-toolbar');
-        
-        // Close drawer if click is outside drawer and toolbar
-        if (!drawerElement?.contains(target) && !toolbarElement?.contains(target)) {
-          this.drawer.close();
-        }
-      }
-    });
-  }
-
-  /**
    * Toggle drawer state
    */
   toggleDrawer(): void {
-    console.log('Toggle drawer clicked');
-    console.log('Drawer reference:', this.drawer);
-    console.log('Container reference:', this.container);
-    console.log('Drawer opened state:', this.drawer?.opened);
-    
     if (this.drawer) {
-      console.log('Drawer exists, toggling...');
       this.drawer.toggle();
-      console.log('After toggle - Drawer opened state:', this.drawer.opened);
-    } else {
-      console.log('Drawer not found!');
     }
   }
 
@@ -116,10 +85,8 @@ export class Layout implements AfterViewInit, OnDestroy {
    * Close drawer (useful for mobile after navigation)
    */
   closeDrawer(): void {
-    this.isHandset$.pipe(takeUntil(this.destroy$)).subscribe(isHandset => {
-      if (isHandset && this.drawer) {
-        this.drawer.close();
-      }
-    });
+    if (this.isHandsetSnapshot && this.drawer) {
+      this.drawer.close();
+    }
   }
 }

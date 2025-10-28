@@ -14,108 +14,192 @@
 
   <div *ngIf="!loading && tournaments && tournaments.length === 0" class="text-muted">No hay torneos.</div>
 
-  <div *ngIf="tournaments && tournaments.length > 0" class="table-responsive">
-    <table class="table table-sm">
-      <thead>
-        <tr>
-          <th>Nombre</th>
-          <th>Fecha</th>
-          <th>Torneo</th>
-          <th>Winners</th>
-          <th>Losers</th>
-          <th class="text-end">Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        <ng-container *ngFor="let t of tournaments">
+  <div *ngIf="tournaments && tournaments.length > 0" class="tournament-list-container">
+    <div class="desktop-table table-responsive">
+      <table class="table table-sm">
+        <thead>
           <tr>
+            <th>Nombre</th>
+            <th>Fecha</th>
+            <th>Torneo</th>
+            <th>Winners</th>
+            <th>Losers</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let t of tournaments">
+            <tr>
+                <td>
+                  {{ t.name || '-' }}
+                  <span *ngIf="t.finished" class="badge bg-danger ms-2">Finalizado</span>
+                </td>
+              <td>{{ t.date || '-' }}</td>
+              <td>{{ t.detail || '-' }}</td>
               <td>
-                {{ t.name || '-' }}
-                <span *ngIf="t.finished" class="badge bg-danger ms-2">Finalizado</span>
+                <span *ngIf="t.winners && t.winners.length > 0">{{ formatWinners(t) }}</span>
+                <span *ngIf="!t.winners || t.winners.length === 0">-</span>
               </td>
-            <td>{{ t.date || '-' }}</td>
-            <td>{{ t.detail || '-' }}</td>
-            <td>
-              <span *ngIf="t.winners && t.winners.length > 0">{{ formatWinners(t) }}</span>
-              <span *ngIf="!t.winners || t.winners.length === 0">-</span>
-            </td>
-            <td>
-              <span *ngIf="t.losers && t.losers.length > 0">{{ formatLosers(t) }}</span>
-              <span *ngIf="!t.losers || t.losers.length === 0">-</span>
-            </td>
-            <td class="text-end">
-              <div class="d-flex align-items-center justify-content-end">
-                <button class="btn btn-sm btn-outline-info me-2" (click)="toggleParticipants(t)">{{ t._showParticipants ? 'Ocultar' : 'Ver' }} participantes</button>
-                <button class="btn btn-sm btn-outline-warning me-2" (click)="openPreview(t)">Comenzar torneo</button>
-                <button class="btn btn-sm btn-outline-primary me-2" (click)="openModal(t)">Editar</button>
-                <!-- Gestionar moved inside Edit modal -->
-              </div>
-              <button class="btn btn-sm btn-outline-danger" (click)="openDeleteModal(t.id, t.name)">Eliminar</button>
-            </td>
-          </tr>
-          <tr *ngIf="t._showParticipants">
-            <td colspan="6" class="bg-light">
-              <div class="d-flex justify-content-end mb-2">
-                <button class="btn btn-sm btn-outline-primary me-2" (click)="t._showLeaderboard = !t._showLeaderboard">{{ t._showLeaderboard ? 'Ocultar ganadores' : 'Ver ganadores' }}</button>
-              </div>
-
-              <div *ngIf="t._showLeaderboard">
-                <div *ngIf="t.leaderboard && t.leaderboard.length > 0" class="mb-2">
-                  <table class="table table-sm mb-0">
-                    <thead>
-                      <tr><th>#</th><th>Jugador</th><th class="text-center">W</th><th class="text-center">L</th><th class="text-center">T</th><th class="text-center">Puntos</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr *ngFor="let p of t.leaderboard; let i = index">
-                        <td>{{ i + 1 }}</td>
-                        <td>{{ p.name }}</td>
-                        <td class="text-center">{{ p.w }}</td>
-                        <td class="text-center">{{ p.l }}</td>
-                        <td class="text-center">{{ p.t }}</td>
-                        <td class="text-center"><strong>{{ p.points }}</strong></td>
-                      </tr>
-                    </tbody>
-                  </table>
+              <td>
+                <span *ngIf="t.losers && t.losers.length > 0">{{ formatLosers(t) }}</span>
+                <span *ngIf="!t.losers || t.losers.length === 0">-</span>
+              </td>
+              <td class="text-end">
+                <div class="d-flex align-items-center justify-content-end">
+                  <button class="btn btn-sm btn-outline-info me-2" (click)="toggleParticipants(t)">{{ t._showParticipants ? 'Ocultar' : 'Ver' }} participantes</button>
+                  <button class="btn btn-sm btn-outline-warning me-2" (click)="openPreview(t)">Comenzar torneo</button>
+                  <button class="btn btn-sm btn-outline-primary me-2" (click)="openModal(t)">Editar</button>
                 </div>
-                <div *ngIf="!t.leaderboard || t.leaderboard.length === 0" class="text-muted">No hay datos para el leaderboard.</div>
-              </div>
-
-              <div *ngIf="!t._showLeaderboard">
-                <div *ngIf="t.matches && t.matches.length === 0" class="p-2 text-muted">No hay partidos registrados para este torneo.</div>
-                <div *ngIf="t.matches && t.matches.length > 0" class="mb-0">
-                  <table class="table table-sm mb-0">
-                    <thead>
-                      <tr><th>Ronda</th><th>Mesa</th><th>Jugador 1</th><th>Jugador 2</th><th>Resultado</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr *ngFor="let m of t.matches">
-                        <td>{{ m.round }}</td>
-                        <td>{{ m.table_number }}</td>
-                        <td>
-                          {{ m.name1 || m.p1 }}
-                          <small class="text-muted ms-2">({{ getPlayerWLTForTournament(t, m.p1) }})</small>
-                        </td>
-                        <td>
-                          {{ m.name2 || m.p2 }}
-                          <small class="text-muted ms-2">({{ getPlayerWLTForTournament(t, m.p2) }})</small>
-                        </td>
-                        <td>
-                          <span *ngIf="m.tie" class="badge bg-secondary">Empate</span>
-                          <span *ngIf="!m.tie && m.winnerName" class="badge bg-success">Ganador: {{ m.winnerName }}</span>
-                          <span *ngIf="!m.tie && !m.winnerName && m.winner" class="badge bg-success">Ganador: {{ m.winner }}</span>
-                          <span *ngIf="!m.tie && m.loserName" class="badge bg-danger ms-1">Perdedor: {{ m.loserName }}</span>
-                          <span *ngIf="!m.tie && !m.loserName && m.loser" class="badge bg-danger ms-1">Perdedor: {{ m.loser }}</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <button class="btn btn-sm btn-outline-danger mt-2 mt-lg-0" (click)="openDeleteModal(t.id, t.name)">Eliminar</button>
+              </td>
+            </tr>
+            <tr *ngIf="t._showParticipants">
+              <td colspan="6" class="bg-light">
+                <div class="d-flex justify-content-end mb-2">
+                  <button class="btn btn-sm btn-outline-primary me-2" (click)="t._showLeaderboard = !t._showLeaderboard">{{ t._showLeaderboard ? 'Ocultar ganadores' : 'Ver ganadores' }}</button>
                 </div>
+
+                <div *ngIf="t._showLeaderboard">
+                  <div *ngIf="t.leaderboard && t.leaderboard.length > 0" class="mb-2">
+                    <table class="table table-sm mb-0">
+                      <thead>
+                        <tr><th>#</th><th>Jugador</th><th class="text-center">W</th><th class="text-center">L</th><th class="text-center">T</th><th class="text-center">Puntos</th></tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let p of t.leaderboard; let i = index">
+                          <td>{{ i + 1 }}</td>
+                          <td>{{ p.name }}</td>
+                          <td class="text-center">{{ p.w }}</td>
+                          <td class="text-center">{{ p.l }}</td>
+                          <td class="text-center">{{ p.t }}</td>
+                          <td class="text-center"><strong>{{ p.points }}</strong></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div *ngIf="!t.leaderboard || t.leaderboard.length === 0" class="text-muted">No hay datos para el leaderboard.</div>
+                </div>
+
+                <div *ngIf="!t._showLeaderboard">
+                  <div *ngIf="t.matches && t.matches.length === 0" class="p-2 text-muted">No hay partidos registrados para este torneo.</div>
+                  <div *ngIf="t.matches && t.matches.length > 0" class="mb-0">
+                    <table class="table table-sm mb-0">
+                      <thead>
+                        <tr><th>Ronda</th><th>Mesa</th><th>Jugador 1</th><th>Jugador 2</th><th>Resultado</th></tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let m of t.matches">
+                          <td>{{ m.round }}</td>
+                          <td>{{ m.table_number }}</td>
+                          <td>
+                            {{ m.name1 || m.p1 }}
+                            <small class="text-muted ms-2">({{ getPlayerWLTForTournament(t, m.p1) }})</small>
+                          </td>
+                          <td>
+                            {{ m.name2 || m.p2 }}
+                            <small class="text-muted ms-2">({{ getPlayerWLTForTournament(t, m.p2) }})</small>
+                          </td>
+                          <td>
+                            <span *ngIf="m.tie" class="badge bg-secondary">Empate</span>
+                            <span *ngIf="!m.tie && m.winnerName" class="badge bg-success">Ganador: {{ m.winnerName }}</span>
+                            <span *ngIf="!m.tie && !m.winnerName && m.winner" class="badge bg-success">Ganador: {{ m.winner }}</span>
+                            <span *ngIf="!m.tie && m.loserName" class="badge bg-danger ms-1">Perdedor: {{ m.loserName }}</span>
+                            <span *ngIf="!m.tie && !m.loserName && m.loser" class="badge bg-danger ms-1">Perdedor: {{ m.loser }}</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mobile-card-list">
+      <div class="tournament-card" *ngFor="let t of tournaments">
+        <div class="tournament-card-header">
+          <div>
+            <div class="tournament-name">{{ t.name || '-' }}</div>
+            <div class="tournament-date">{{ t.date || '-' }}</div>
+          </div>
+          <span *ngIf="t.finished" class="badge bg-danger">Finalizado</span>
+        </div>
+
+        <div class="tournament-card-actions">
+          <button class="btn btn-sm btn-outline-info" (click)="toggleParticipants(t)">{{ t._showParticipants ? 'Ocultar' : 'Ver' }} participantes</button>
+          <button class="btn btn-sm btn-outline-warning" (click)="openPreview(t)">Comenzar torneo</button>
+          <button class="btn btn-sm btn-outline-primary" (click)="openModal(t)">Editar</button>
+          <button class="btn btn-sm btn-outline-danger" (click)="openDeleteModal(t.id, t.name)">Eliminar</button>
+        </div>
+
+        <div class="tournament-card-extra" *ngIf="t._showParticipants">
+          <div class="d-flex justify-content-end mb-2">
+            <button class="btn btn-sm btn-outline-primary" (click)="t._showLeaderboard = !t._showLeaderboard">{{ t._showLeaderboard ? 'Ocultar ganadores' : 'Ver ganadores' }}</button>
+          </div>
+
+          <div *ngIf="t._showLeaderboard; else matchList">
+            <div *ngIf="t.leaderboard && t.leaderboard.length > 0; else noLeaderboardMobile">
+              <div class="table-responsive-sm">
+                <table class="table table-sm mb-0">
+                  <thead>
+                    <tr><th>#</th><th>Jugador</th><th class="text-center">W</th><th class="text-center">L</th><th class="text-center">T</th><th class="text-center">Pts</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let p of t.leaderboard; let i = index">
+                      <td>{{ i + 1 }}</td>
+                      <td>{{ p.name }}</td>
+                      <td class="text-center">{{ p.w }}</td>
+                      <td class="text-center">{{ p.l }}</td>
+                      <td class="text-center">{{ p.t }}</td>
+                      <td class="text-center"><strong>{{ p.points }}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </td>
-          </tr>
-        </ng-container>
-      </tbody>
-    </table>
+            </div>
+          </div>
+          <ng-template #noLeaderboardMobile>
+            <div class="text-muted mb-2">No hay datos para el leaderboard.</div>
+          </ng-template>
+          <ng-template #matchList>
+            <div *ngIf="t.matches && t.matches.length === 0" class="text-muted">No hay partidos registrados para este torneo.</div>
+            <div *ngIf="t.matches && t.matches.length > 0" class="table-responsive-sm">
+              <table class="table table-sm mb-0">
+                <thead>
+                  <tr><th>Ronda</th><th>Mesa</th><th>Jugador 1</th><th>Jugador 2</th><th>Resultado</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let m of t.matches">
+                    <td>{{ m.round }}</td>
+                    <td>{{ m.table_number }}</td>
+                    <td>
+                      {{ m.name1 || m.p1 }}
+                      <small class="text-muted ms-1">({{ getPlayerWLTForTournament(t, m.p1) }})</small>
+                    </td>
+                    <td>
+                      {{ m.name2 || m.p2 }}
+                      <small class="text-muted ms-1">({{ getPlayerWLTForTournament(t, m.p2) }})</small>
+                    </td>
+                    <td>
+                      <span *ngIf="m.tie" class="badge bg-secondary">Empate</span>
+                      <span *ngIf="!m.tie && (m.winnerName || m.winner)" class="badge bg-success">
+                        Ganador: {{ m.winnerName || m.winner }}
+                      </span>
+                      <span *ngIf="!m.tie && (m.loserName || m.loser)" class="badge bg-danger ms-1">
+                        Perdedor: {{ m.loserName || m.loser }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Add / Edit Tournament Modal -->

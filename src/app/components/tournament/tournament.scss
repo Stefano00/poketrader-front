@@ -1,3 +1,101 @@
 .tournament {
   padding: 16px;
 }
+
+.tournament-list-container {
+  width: 100%;
+}
+
+.desktop-table {
+  display: block;
+}
+
+.mobile-card-list {
+  display: none;
+}
+
+.tournament-card {
+  background-color: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tournament-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+
+  .tournament-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #1f2933;
+  }
+
+  .tournament-date {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+}
+
+.tournament-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .btn {
+    flex: 1 1 48%;
+  }
+}
+
+.tournament-card-extra {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 12px;
+
+  .table {
+    background: #fff;
+  }
+
+  .table-responsive-sm {
+    width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 992px) {
+  .tournament-card-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .desktop-table {
+    display: none;
+  }
+
+  .mobile-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 576px) {
+  .tournament-card {
+    padding: 14px;
+  }
+
+  .tournament-card-actions {
+    gap: 6px;
+
+    .btn {
+      flex: 1 1 100%;
+    }
+  }
+}

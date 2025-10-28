@@ -1,4 +1,4 @@
-<div class="container mt-3">
+<div class="container mt-3 current-tournament">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <h3 class="mb-0">Vista previa del torneo</h3>
     <button class="btn btn-outline-secondary" (click)="goBack()" title="Volver" aria-label="Volver">
@@ -26,17 +26,16 @@
   </div>
   </div>
 
-  <div class="mb-2 d-flex gap-2">
-    <button class="btn btn-primary" (click)="randomizePairings()" [disabled]="tournamentFinished">Reordenar</button>
-    <button class="btn btn-success" (click)="startCountdown()" [disabled]="tournamentFinished">Comenzar</button>
-  <button class="btn btn-secondary" (click)="openResetModal()" title="Resetear sólo los controles de resultado" [disabled]="tournamentFinished">Reset</button>
-    <button class="btn btn-outline-secondary" (click)="stopCountdown()" [disabled]="tournamentFinished">Detener</button>
-  <button class="btn btn-outline-primary" (click)="continueNextRound()" [disabled]="!canContinue() || tournamentFinished" title="Se habilita cuando la ronda está guardada">Continuar siguiente ronda</button>
-  <button class="btn btn-primary" (click)="saveAllMatches()" [disabled]="!hasChanges() || tournamentFinished" title="No hay cambios para guardar">Guardar todo</button>
-  <button class="btn btn-danger ms-auto" (click)="openFinalizeModal()" [disabled]="!hasAnySavedMatches || tournamentFinished">Finalizar torneo</button>
+  <div class="mb-2 d-flex gap-2 flex-wrap align-items-center actions-row">
+    <button class="btn btn-primary action-btn" (click)="randomizePairings()" [disabled]="tournamentFinished">Reordenar</button>
+    <button class="btn btn-success action-btn" (click)="startCountdown()" [disabled]="tournamentFinished">Comenzar</button>
+    <button class="btn btn-secondary action-btn" (click)="openResetModal()" title="Resetear sólo los controles de resultado" [disabled]="tournamentFinished">Reset</button>
+    <button class="btn btn-outline-secondary action-btn" (click)="stopCountdown()" [disabled]="tournamentFinished">Detener</button>
+    <button class="btn btn-primary action-btn" (click)="saveAndContinue()" [disabled]="tournamentFinished || (!hasChanges() && !canContinue())" title="Guarda resultados y avanza cuando la ronda está lista">Guardar y continuar</button>
+    <button class="btn btn-danger ms-auto action-btn finalize-btn" (click)="openFinalizeModal()" [disabled]="!hasAnySavedMatches || tournamentFinished">Finalizar torneo</button>
   </div>
 
-  <div class="card mb-3">
+  <div class="card mb-3 pairings-desktop">
     <div class="card-body">
       <h5>Pairings</h5>
       <table class="table table-sm">
@@ -85,6 +84,74 @@
           </ng-container>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="pairings-mobile">
+    <div class="card pairing-card" *ngFor="let p of pairings">
+      <div class="card-body">
+        @let pair = getAlphabeticalPair(p);
+        <div class="pairing-card-header">
+          <div>
+            <div class="table-label">Mesa {{ p.table }}</div>
+            <div class="round-label">Ronda {{ getRoundValue(tableNumber(p)) }}</div>
+          </div>
+          <div [ngClass]="isSaved(p) ? 'badge bg-success' : 'badge bg-secondary'">
+            {{ isSaved(p) ? 'Guardada' : 'Pendiente' }}
+          </div>
+        </div>
+
+        <div class="pairing-players">
+          <div class="player-line">
+            <span class="player-name">{{ pair[0].name }}</span>
+            <small class="text-muted">({{ getPlayerWLT(pair[0].id) }})</small>
+          </div>
+          <div class="player-line">
+            <span class="player-name">{{ pair[1].name }}</span>
+            <small class="text-muted">({{ getPlayerWLT(pair[1].id) }})</small>
+          </div>
+        </div>
+
+        <div class="pairing-games">
+          <div class="game-buttons">
+            <ng-container *ngFor="let i of gamesRange(); let idx = index">
+              <div class="btn-group btn-group-sm" role="group" aria-label="game-{{idx}}-{{tableNumber(p)}}">
+                <button type="button" class="btn" [class.btn-primary]="getGameWinner(tableNumber(p), idx) === 'p1'" [class.btn-outline-primary]="getGameWinner(tableNumber(p), idx) !== 'p1'" (click)="toggleGameWinner(tableNumber(p), idx, 'p1')" [disabled]="tournamentFinished">G{{idx+1}} P1</button>
+                <button type="button" class="btn" [class.btn-secondary]="getGameWinner(tableNumber(p), idx) === 'p2'" [class.btn-outline-secondary]="getGameWinner(tableNumber(p), idx) !== 'p2'" (click)="toggleGameWinner(tableNumber(p), idx, 'p2')" [disabled]="tournamentFinished">G{{idx+1}} P2</button>
+              </div>
+            </ng-container>
+          </div>
+          <div class="totals small">
+            Totales: {{ getGamesCount(tableNumber(p)).p1 }} - {{ getGamesCount(tableNumber(p)).p2 }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="tournamentFinished" class="card mb-3">
+    <div class="card-body">
+      <h5>Resultados finales</h5>
+      <div *ngIf="leaderboard && leaderboard.length > 0; else noLeaderboard" class="table-responsive-sm final-results">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr><th>#</th><th>Jugador</th><th class="text-center">W</th><th class="text-center">L</th><th class="text-center">T</th><th class="text-center">Puntos</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of leaderboard; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ p.name }}</td>
+              <td class="text-center">{{ p.w }}</td>
+              <td class="text-center">{{ p.l }}</td>
+              <td class="text-center">{{ p.t }}</td>
+              <td class="text-center"><strong>{{ p.points }}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noLeaderboard>
+        <div class="text-muted">No hay datos de resultados finales para este torneo.</div>
+      </ng-template>
     </div>
   </div>
 

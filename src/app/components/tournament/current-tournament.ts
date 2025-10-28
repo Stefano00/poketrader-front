@@ -8,13 +8,15 @@ import { getFirestore, collection, getDocs, query, where, addDoc, serverTimestam
   selector: 'app-current-tournament',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule],
-  templateUrl: './current-tournament.html'
+  templateUrl: './current-tournament.html',
+  styleUrl: './current-tournament.scss'
 })
 export class CurrentTournament implements OnInit {
   tournamentId: string | null = null;
   participants: Array<{id:string,name:string}> = [];
 
   pairings: Array<{p1:any,p2:any,table?:number}> = [];
+  private readonly BYE_ID = '__BYE__';
 
   // countdown (minutes)
   countdownMinutes = 1;
@@ -48,6 +50,8 @@ export class CurrentTournament implements OnInit {
   tournamentFinished = false;
   // whether there is at least one saved match for this tournament
   hasAnySavedMatches = false;
+  // leaderboard standings when tournament finished
+  leaderboard: Array<{ personId: string, name: string, w: number, l: number, t: number, points: number }> = [];
 
   constructor(private route: ActivatedRoute, private router: Router) {}
 
@@ -135,8 +139,13 @@ export class CurrentTournament implements OnInit {
         const p2 = det['personId_2'] || det['nm_person_identity_id_2'];
         const rnd = Number(det['round'] ?? det['ronda'] ?? det['nm_round'] ?? 1) || 1;
         if (rnd > maxRound) maxRound = rnd;
-        if (p1 && p2) {
-          prev.add(this.pairKey(String(p1), String(p2)));
+        const id1 = p1 ? String(p1) : null;
+        const id2 = p2 ? String(p2) : null;
+        if (id1 && id2) {
+          prev.add(this.pairKey(id1, id2));
+        } else if (id1 || id2) {
+          const active = id1 || id2;
+          prev.add(this.pairKey(String(active), this.BYE_ID));
         }
       }
     } catch (err) {
@@ -177,6 +186,7 @@ export class CurrentTournament implements OnInit {
           }
         }
       }
+      this.rebuildLeaderboard();
     } catch (err) {
       console.error('Error building WLT map:', err);
     }
@@ -229,71 +239,57 @@ export class CurrentTournament implements OnInit {
     if (!this.tournamentId) return;
     const { previousPairs, maxRound } = await this.loadPastMatches();
     const nextRound = (maxRound || 0) + 1;
-    const ids = this.participants.map(p => p.id);
-    if (ids.length === 0) return;
+    const participantMap = new Map<string, { id: string | number; name: string }>();
+    for (const p of this.participants) {
+      if (!p || p.id === undefined || p.id === null) continue;
+      participantMap.set(String(p.id), p);
+    }
+    const participantIds = Array.from(participantMap.keys());
+    if (participantIds.length === 0) return;
 
-    const attempts = 300;
-    let success = false;
-    let resultPairs: Array<any> = [];
-
-    const tryMakePairs = () => {
-      const arr = [...ids];
-      // shuffle
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      const pairs: any[] = [];
-      let table = 1;
-      let i = 0;
-      while (i < arr.length) {
-        const a = arr[i];
-        if (i + 1 < arr.length) {
-          // find partner for a that hasn't played with a
-          let partner = arr[i + 1];
-          if (previousPairs.has(this.pairKey(a, partner))) {
-            // try to find alternative in later positions
-            let found = -1;
-            for (let k = i + 2; k < arr.length; k++) {
-              if (!previousPairs.has(this.pairKey(a, arr[k]))) { found = k; break; }
-            }
-            if (found === -1) {
-              // fail this attempt
-              return null;
-            }
-            // swap partner into i+1
-            [arr[i + 1], arr[found]] = [arr[found], arr[i + 1]];
-            partner = arr[i + 1];
-          }
-          pairs.push({ p1: this.participants.find(x => x.id === a), p2: this.participants.find(x => x.id === partner), table });
-          table++;
-          i += 2;
-        } else {
-          // bye
-          pairs.push({ p1: this.participants.find(x => x.id === a), p2: null, table });
-          i += 1;
-          table++;
-        }
-      }
-      return pairs;
-    };
-
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const res = tryMakePairs();
-      if (res && res.length > 0) { success = true; resultPairs = res; break; }
+    const byeHistory = new Set<string>();
+    for (const key of Array.from(previousPairs)) {
+      const parts = key.split('::');
+      if (parts.length !== 2) continue;
+      const [a, b] = parts;
+      if (a === this.BYE_ID && b) byeHistory.add(b);
+      else if (b === this.BYE_ID && a) byeHistory.add(a);
     }
 
-    if (!success) {
-      // fallback: simple shuffle allowing repeats
-      const arr = [...ids];
+    let resultPairs: Array<any> = [];
+    let computed = this.buildNonRepeatingPairs(participantIds, previousPairs, byeHistory, false);
+    if (!computed || computed.length === 0) {
+      computed = this.buildNonRepeatingPairs(participantIds, previousPairs, byeHistory, true);
+    }
+
+    if (computed && computed.length > 0) {
+      resultPairs = computed.map((pair, idx) => {
+        const p1 = participantMap.get(pair.p1Id) || { id: pair.p1Id, name: pair.p1Id };
+        const p2 = pair.p2Id ? (participantMap.get(pair.p2Id) || { id: pair.p2Id, name: pair.p2Id }) : null;
+        return { p1, p2, table: idx + 1 };
+      });
+    } else {
+      // fallback: simple shuffle allowing repeats (only when no alternate pairing exists)
+      const arr = [...participantIds];
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      if (arr.length % 2 === 1) {
+        const byeCandidate = arr.find(id => !byeHistory.has(id));
+        if (byeCandidate) {
+          const idx = arr.indexOf(byeCandidate);
+          arr.splice(idx, 1);
+          arr.push(byeCandidate);
+        }
       }
       const pairs: any[] = [];
       let tnum = 1;
       for (let i = 0; i < arr.length; i += 2) {
-        pairs.push({ p1: this.participants.find(x => x.id === arr[i]), p2: (i + 1 < arr.length) ? this.participants.find(x => x.id === arr[i + 1]) : null, table: tnum });
+        const first = participantMap.get(arr[i]) || { id: arr[i], name: arr[i] };
+        const nextId = arr[i + 1];
+        const second = nextId ? (participantMap.get(nextId) || { id: nextId, name: nextId }) : null;
+        pairs.push({ p1: first, p2: second, table: tnum });
         tnum++;
       }
       resultPairs = pairs;
@@ -312,6 +308,81 @@ export class CurrentTournament implements OnInit {
     
     // Reset countdown for new round
     this.resetCountdownForNewRound();
+  }
+
+  private buildNonRepeatingPairs(
+    ids: string[],
+    previousPairs: Set<string>,
+    byeHistory: Set<string>,
+    allowByeRepeats: boolean
+  ): Array<{ p1Id: string; p2Id: string | null }> | null {
+    if (!ids || ids.length === 0) return [];
+    const baseIds = [...ids];
+    const attempts = Math.max(5, ids.length * 3);
+
+    const shuffleInPlace = (arr: string[]) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const order = shuffleInPlace([...baseIds]);
+      const used = new Set<string>();
+      const result: Array<{ p1Id: string; p2Id: string | null }> = [];
+      const allowBye = order.length % 2 === 1;
+
+      const shuffle = (arr: string[]) => shuffleInPlace([...arr]);
+
+      const dfs = (): boolean => {
+        if (used.size === order.length) return true;
+
+        let candidate: string | undefined;
+        for (const id of order) {
+          if (!used.has(id)) { candidate = id; break; }
+        }
+        if (candidate === undefined) return true;
+        used.add(candidate);
+
+        const available: string[] = [];
+        for (const id of order) {
+          if (id === candidate || used.has(id)) continue;
+          available.push(id);
+        }
+
+        const preferred = shuffle(available.filter(id => !previousPairs.has(this.pairKey(candidate, id))));
+        const fallback = shuffle(available.filter(id => previousPairs.has(this.pairKey(candidate, id))));
+
+        for (const pool of [preferred, fallback]) {
+          for (const id of pool) {
+            used.add(id);
+            result.push({ p1Id: candidate, p2Id: id });
+            if (dfs()) return true;
+            result.pop();
+            used.delete(id);
+          }
+        }
+
+        if (allowBye && !result.some(p => p.p2Id === null)) {
+          const byeKey = this.BYE_ID;
+          const hadByeBefore = previousPairs.has(this.pairKey(candidate, byeKey)) || byeHistory.has(candidate);
+          if (!hadByeBefore || allowByeRepeats) {
+            result.push({ p1Id: candidate, p2Id: null });
+            if (dfs()) return true;
+            result.pop();
+          }
+        }
+
+        used.delete(candidate);
+        return false;
+      };
+
+      if (dfs()) return result;
+    }
+
+    return null;
   }
 
   // can continue to the next round only when current round results have been saved for all tables
@@ -352,6 +423,7 @@ export class CurrentTournament implements OnInit {
           }
         }
       }
+      this.rebuildLeaderboard();
     } catch (err) {
       console.error('Error loading participants for preview:', err);
     }
@@ -634,6 +706,7 @@ export class CurrentTournament implements OnInit {
   // UI: save modal state for double confirmation
   showSaveModal = false;
   saveErrorMessage: string | null = null;
+  private pendingContinueAfterSave = false;
   // Reset confirmation modal
   showResetModal = false;
 
@@ -664,11 +737,14 @@ export class CurrentTournament implements OnInit {
   }
 
   // Entry called by the button: open modal only if validation passes
-  saveAllMatches() {
+  saveAllMatches(continueAfter: boolean = false) {
+    this.pendingContinueAfterSave = continueAfter;
     this.saveErrorMessage = null;
     if (!this.hasChanges()) {
-      this.saveErrorMessage = 'No hay cambios para guardar.';
-      this.showSaveModal = true;
+      if (!continueAfter) {
+        this.saveErrorMessage = 'No hay cambios para guardar.';
+        this.showSaveModal = true;
+      }
       return;
     }
     const v = this.validateAllTables();
@@ -679,6 +755,18 @@ export class CurrentTournament implements OnInit {
     }
     // open modal for single confirmation
     this.showSaveModal = true;
+  }
+
+  async saveAndContinue() {
+    if (this.tournamentFinished) return;
+    if (this.hasChanges()) {
+      this.saveAllMatches(true);
+      return;
+    }
+    if (this.canContinue()) {
+      await this.continueNextRound();
+      return;
+    }
   }
 
   // Reset modal handlers
@@ -748,14 +836,22 @@ export class CurrentTournament implements OnInit {
 
   // final confirmation from modal (single step)
   async confirmSaveFromModal() {
-    await this.performSaveAllMatches();
-    this.showSaveModal = false;
-    this.saveErrorMessage = null;
+    try {
+      await this.performSaveAllMatches();
+      this.showSaveModal = false;
+      this.saveErrorMessage = null;
+      if (this.pendingContinueAfterSave && this.canContinue()) {
+        await this.continueNextRound();
+      }
+    } finally {
+      this.pendingContinueAfterSave = false;
+    }
   }
 
   cancelSaveModal() {
-  this.showSaveModal = false;
-  this.saveErrorMessage = null;
+    this.showSaveModal = false;
+    this.saveErrorMessage = null;
+    this.pendingContinueAfterSave = false;
   }
 
   // Actual saving logic (used after final confirmation)
@@ -771,6 +867,9 @@ export class CurrentTournament implements OnInit {
       const tbl = Number(p.table || 0);
       const sel = this.matchSelections[tbl];
       if (!sel) continue;
+      const p1Id = p.p1 && p.p1.id ? String(p.p1.id) : null;
+      const p2Id = p.p2 && p.p2.id ? String(p.p2.id) : null;
+      const isByeMatch = !p1Id || !p2Id;
       // Determine points per player
       let points1 = 0;
       let points2 = 0;
@@ -784,11 +883,36 @@ export class CurrentTournament implements OnInit {
         points2 = Number(sel.scoreP2 ?? 0);
       }
 
+      if (isByeMatch) {
+        const activeId = p1Id || p2Id;
+        const winsNeeded = Math.max(Number(this.bestOf) || 0, 1);
+        if (activeId) {
+          if (p1Id === activeId) {
+            points1 = winsNeeded;
+            points2 = 0;
+          } else {
+            points1 = 0;
+            points2 = winsNeeded;
+          }
+          const totalGames = Math.max(Number(this.bestOf) || 0, winsNeeded);
+          if (!sel.games || !Array.isArray(sel.games) || sel.games.length < totalGames) {
+            sel.games = Array(totalGames).fill(null);
+          } else {
+            sel.games = sel.games.map(() => null);
+          }
+          for (let i = 0; i < winsNeeded && Array.isArray(sel.games) && i < sel.games.length; i++) {
+            sel.games[i] = (p1Id === activeId) ? 'p1' : 'p2';
+          }
+          sel.scoreP1 = p1Id === activeId ? points1 : 0;
+          sel.scoreP2 = p2Id === activeId ? points2 : 0;
+        }
+      }
+
       let winnerId: string | null = null;
       let loserId: string | null = null;
       let boTie = false;
-      if (points1 > points2) { winnerId = p.p1 ? p.p1.id : null; loserId = p.p2 ? p.p2.id : null; }
-      else if (points2 > points1) { winnerId = p.p2 ? p.p2.id : null; loserId = p.p1 ? p.p1.id : null; }
+      if (points1 > points2) { winnerId = p1Id; loserId = p2Id; }
+      else if (points2 > points1) { winnerId = p2Id; loserId = p1Id; }
       else { boTie = true; }
 
       const personId1 = p.p1 ? p.p1.id : null;
@@ -921,5 +1045,47 @@ export class CurrentTournament implements OnInit {
       clearInterval(this.displayIntervalId);
       this.displayIntervalId = null;
     }
+  }
+
+  private rebuildLeaderboard() {
+    const standings: Record<string, { personId: string, name: string, w: number, l: number, t: number, points: number }> = {};
+    const participantMap = new Map<string, { id: string; name: string }>();
+    for (const p of this.participants) {
+      if (p && p.id !== undefined && p.id !== null) {
+        participantMap.set(String(p.id), { id: String(p.id), name: p.name || String(p.id) });
+      }
+    }
+    // initialize from participants
+    for (const [pid, pdata] of participantMap.entries()) {
+      const stats = this.wltMap[pid] || { w: 0, l: 0, t: 0 };
+      standings[pid] = {
+        personId: pid,
+        name: pdata.name,
+        w: Number(stats.w || 0),
+        l: Number(stats.l || 0),
+        t: Number(stats.t || 0),
+        points: Number(stats.w || 0) * 3 + Number(stats.t || 0)
+      };
+    }
+    // include anyone else present in wltMap (e.g., legacy data not in participants list)
+    for (const pid of Object.keys(this.wltMap || {})) {
+      if (!standings[pid]) {
+        const stats = this.wltMap[pid];
+        const name = participantMap.get(pid)?.name || pid;
+        standings[pid] = {
+          personId: pid,
+          name,
+          w: Number(stats.w || 0),
+          l: Number(stats.l || 0),
+          t: Number(stats.t || 0),
+          points: Number(stats.w || 0) * 3 + Number(stats.t || 0)
+        };
+      }
+    }
+    this.leaderboard = Object.values(standings).sort((a, b) =>
+      (Number(b.points || 0) - Number(a.points || 0)) ||
+      (Number(b.w || 0) - Number(a.w || 0)) ||
+      String(a.name || '').localeCompare(String(b.name || ''))
+    );
   }
 }
