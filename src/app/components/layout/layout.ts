@@ -1,5 +1,5 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { Component, inject, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
@@ -28,16 +28,12 @@ import { Observable, Subject } from 'rxjs';
 export class Layout implements AfterViewInit, OnDestroy {
   @ViewChild('drawer', { static: false }) drawer!: MatSidenav;
   
-  private breakpointObserver = inject(BreakpointObserver);
   private destroy$ = new Subject<void>();
-  private isHandsetSnapshot = false;
+  isHandsetSnapshot = false;
+  desktopDrawerOpen = true;
+  drawerMobileOpened = false;
   
-  isHandset$: Observable<boolean> = this.breakpointObserver
-    .observe(Breakpoints.Handset)
-    .pipe(
-      map(result => result.matches),
-      shareReplay(1)
-    );
+  isHandset$: Observable<boolean>;
 
   menuItems = [
     { path: 'home', icon: 'home', label: 'Home' },
@@ -49,19 +45,28 @@ export class Layout implements AfterViewInit, OnDestroy {
     { path: 'tournament/create-person', icon: 'person_add', label: 'Create Person' }
   ];
 
+  constructor(private breakpointObserver: BreakpointObserver) {
+    this.isHandset$ = this.breakpointObserver
+      .observe(Breakpoints.Handset)
+      .pipe(
+        map(result => result.matches),
+        shareReplay(1)
+      );
+  }
+
   ngAfterViewInit(): void {
     this.isHandset$
       .pipe(takeUntil(this.destroy$))
       .subscribe(isHandset => {
         this.isHandsetSnapshot = isHandset;
-        if (!this.drawer) {
-          return;
-        }
+        if (!this.drawer) return;
         if (isHandset) {
-          // On mobile we use over mode and keep the drawer closed by default
+          this.desktopDrawerOpen = false;
+          this.drawerMobileOpened = false;
           this.drawer.close();
         } else {
-          // On larger screens keep the drawer open for a classic sidebar
+          this.drawerMobileOpened = false;
+          this.desktopDrawerOpen = true;
           this.drawer.open();
         }
       });
@@ -76,8 +81,15 @@ export class Layout implements AfterViewInit, OnDestroy {
    * Toggle drawer state
    */
   toggleDrawer(): void {
-    if (this.drawer) {
-      this.drawer.toggle();
+    if (!this.drawer) return;
+    if (this.isHandsetSnapshot) {
+      this.drawerMobileOpened = !this.drawerMobileOpened;
+      if (this.drawerMobileOpened) this.drawer.open();
+      else this.drawer.close();
+    } else {
+      this.desktopDrawerOpen = !this.desktopDrawerOpen;
+      if (this.desktopDrawerOpen) this.drawer.open();
+      else this.drawer.close();
     }
   }
 
@@ -85,7 +97,8 @@ export class Layout implements AfterViewInit, OnDestroy {
    * Close drawer (useful for mobile after navigation)
    */
   closeDrawer(): void {
-    if (this.isHandsetSnapshot && this.drawer) {
+    if (this.isHandsetSnapshot && this.drawer && this.drawerMobileOpened) {
+      this.drawerMobileOpened = false;
       this.drawer.close();
     }
   }

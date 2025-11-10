@@ -38,49 +38,81 @@
   <div class="card mb-3 pairings-desktop">
     <div class="card-body">
       <h5>Pairings</h5>
-      <table class="table table-sm">
+      <table class="table table-sm align-middle">
         <thead>
-          <tr><th>Ronda</th><th>Mesa</th><th>Jugador</th><th>Oponente</th><th>Resultado</th></tr>
+          <tr>
+            <th>Ronda</th>
+            <th>Mesa</th>
+            <th>Jugador</th>
+            <th class="text-center">Resultado</th>
+            <th class="text-center">Totales</th>
+          </tr>
         </thead>
         <tbody>
           <ng-container *ngFor="let p of pairings">
-            <!-- per-match 3-game UI follows -->
-              <tr>
-                <td rowspan="2" class="align-middle">
-                  <label class="form-label mb-0">Ronda</label>
-                  <input type="number" class="form-control form-control-sm" style="width:80px; display:inline-block;" [value]="getRoundValue(tableNumber(p))" readonly />
-                </td>
-                <td rowspan="2" class="align-middle text-center">
-                  {{ p.table }}
-                  <div *ngIf="isSaved(p)" class="badge bg-success ms-1">Guardada</div>
-                  <div *ngIf="!isSaved(p)" class="badge bg-secondary ms-1">Pendiente</div>
-                </td>
-                <td>{{ getAlphabeticalPair(p)[0].name }} <small class="text-muted">({{ getPlayerWLT(getAlphabeticalPair(p)[0].id) }})</small></td>
-                <td>{{ getAlphabeticalPair(p)[1].name }} <small class="text-muted">({{ getPlayerWLT(getAlphabeticalPair(p)[1].id) }})</small></td>
-                <td rowspan="2">
-
-                  <div class="d-flex flex-column gap-1">
-                    <div class="d-flex gap-2 align-items-center">
-                      <ng-container *ngFor="let i of gamesRange(); let idx = index">
-                        <div class="btn-group btn-group-sm" role="group" aria-label="game-{{idx}}-{{tableNumber(p)}}">
-                            <button type="button" class="btn" [class.btn-primary]="getGameWinner(tableNumber(p), idx) === 'p1'" [class.btn-outline-primary]="getGameWinner(tableNumber(p), idx) !== 'p1'" (click)="toggleGameWinner(tableNumber(p), idx, 'p1')" [disabled]="tournamentFinished">G{{idx+1}} P1</button>
-                            <button type="button" class="btn" [class.btn-secondary]="getGameWinner(tableNumber(p), idx) === 'p2'" [class.btn-outline-secondary]="getGameWinner(tableNumber(p), idx) !== 'p2'" (click)="toggleGameWinner(tableNumber(p), idx, 'p2')" [disabled]="tournamentFinished">G{{idx+1}} P2</button>
-                        </div>
-                      </ng-container>
-                      <div class="ms-3 small">
-                        Totales: {{ getGamesCount(tableNumber(p)).p1 }} - {{ getGamesCount(tableNumber(p)).p2 }}
-                      </div>
-                    </div>
+            @let players = getPlayersForMatch(p);
+            @let tableId = tableNumber(p);
+            @let totals = getGamesCount(tableId);
+            <tr *ngFor="let player of players; let playerIndex = index">
+              <td *ngIf="playerIndex === 0" [attr.rowspan]="players.length" class="align-middle">
+                <label class="form-label mb-0">Ronda</label>
+                <input
+                  type="number"
+                  class="form-control form-control-sm"
+                  style="width:80px; display:inline-block;"
+                  [value]="getRoundValue(tableId)"
+                  readonly
+                />
+              </td>
+              <td *ngIf="playerIndex === 0" [attr.rowspan]="players.length" class="align-middle text-center">
+                {{ p.table }}
+                <div *ngIf="isSaved(p)" class="badge bg-success ms-1">Guardada</div>
+                <div *ngIf="!isSaved(p)" class="badge bg-secondary ms-1">Pendiente</div>
+              </td>
+              <td>
+                <div class="player-line mb-0">
+                  <div class="player-name-edit">
+                    <span class="player-name">{{ player.name }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-link p-0 edit-score-btn"
+                      [disabled]="!player.id || player.isBye"
+                      (click)="openPlayerResultEditorFromPlayer(player)"
+                      aria-label="Editar totales de {{ player.name }}"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z"/>
+                      </svg>
+                    </button>
                   </div>
-
-                </td>
-
-              </tr>
-              <!-- mirrored row (display inverted) -->
-              <tr>
-                <td>{{ getAlphabeticalPair(p)[1].name }} <small class="text-muted">({{ getPlayerWLT(getAlphabeticalPair(p)[1].id) }})</small></td>
-                <td>{{ getAlphabeticalPair(p)[0].name }} <small class="text-muted">({{ getPlayerWLT(getAlphabeticalPair(p)[0].id) }})</small></td>
-              </tr>
+                  <small class="text-muted">({{ getPlayerWLT(player.id) }})</small>
+                </div>
+              </td>
+              <td>
+                <div class="game-radio-group">
+                  <ng-container *ngFor="let i of gamesRange(); let idx = index">
+                    <div class="form-check form-check-inline game-radio">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        [attr.name]="'desktop-game-' + tableId + '-' + idx"
+                        [attr.id]="'desktop-game-' + tableId + '-' + idx + '-' + player.side"
+                        [checked]="getGameWinner(tableId, idx) === player.side"
+                        (change)="selectGameWinner(tableId, idx, player.side)"
+                        [disabled]="tournamentFinished || player.isBye"
+                        [attr.aria-label]="'Juego ' + (idx + 1) + ' para ' + player.name"
+                      />
+                      <label class="form-check-label" [attr.for]="'desktop-game-' + tableId + '-' + idx + '-' + player.side">
+                        G{{ idx + 1 }}
+                      </label>
+                    </div>
+                  </ng-container>
+                </div>
+              </td>
+              <td *ngIf="playerIndex === 0" [attr.rowspan]="players.length" class="align-middle text-center small">
+                Totales: {{ totals.p1 }} - {{ totals.p2 }}
+              </td>
+            </tr>
           </ng-container>
         </tbody>
       </table>
@@ -90,11 +122,13 @@
   <div class="pairings-mobile">
     <div class="card pairing-card" *ngFor="let p of pairings">
       <div class="card-body">
-        @let pair = getAlphabeticalPair(p);
+        @let players = getPlayersForMatch(p);
+        @let tableId = tableNumber(p);
+        @let totals = getGamesCount(tableId);
         <div class="pairing-card-header">
           <div>
             <div class="table-label">Mesa {{ p.table }}</div>
-            <div class="round-label">Ronda {{ getRoundValue(tableNumber(p)) }}</div>
+            <div class="round-label">Ronda {{ getRoundValue(tableId) }}</div>
           </div>
           <div [ngClass]="isSaved(p) ? 'badge bg-success' : 'badge bg-secondary'">
             {{ isSaved(p) ? 'Guardada' : 'Pendiente' }}
@@ -102,27 +136,47 @@
         </div>
 
         <div class="pairing-players">
-          <div class="player-line">
-            <span class="player-name">{{ pair[0].name }}</span>
-            <small class="text-muted">({{ getPlayerWLT(pair[0].id) }})</small>
-          </div>
-          <div class="player-line">
-            <span class="player-name">{{ pair[1].name }}</span>
-            <small class="text-muted">({{ getPlayerWLT(pair[1].id) }})</small>
+          <div class="player-line" *ngFor="let player of players">
+            <div class="player-name-edit">
+              <span class="player-name">{{ player.name }}</span>
+              <button
+                type="button"
+                class="btn btn-link p-0 edit-score-btn"
+                [disabled]="!player.id || player.isBye"
+                (click)="openPlayerResultEditorFromPlayer(player)"
+                aria-label="Editar totales de {{ player.name }}"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z"/>
+                </svg>
+              </button>
+            </div>
+            <small class="text-muted ms-1">({{ getPlayerWLT(player.id) }})</small>
+            <div class="game-radio-group">
+              <ng-container *ngFor="let i of gamesRange(); let idx = index">
+                <div class="form-check form-check-inline game-radio">
+                  <input
+                    class="form-check-input"
+                    type="radio"
+                    [attr.name]="'mobile-game-' + tableId + '-' + idx"
+                    [attr.id]="'mobile-game-' + tableId + '-' + idx + '-' + player.side"
+                    [checked]="getGameWinner(tableId, idx) === player.side"
+                    (change)="selectGameWinner(tableId, idx, player.side)"
+                    [disabled]="tournamentFinished || player.isBye"
+                    [attr.aria-label]="'Juego ' + (idx + 1) + ' para ' + player.name"
+                  />
+                  <label class="form-check-label" [attr.for]="'mobile-game-' + tableId + '-' + idx + '-' + player.side">
+                    G{{ idx + 1 }}
+                  </label>
+                </div>
+              </ng-container>
+            </div>
           </div>
         </div>
 
         <div class="pairing-games">
-          <div class="game-buttons">
-            <ng-container *ngFor="let i of gamesRange(); let idx = index">
-              <div class="btn-group btn-group-sm" role="group" aria-label="game-{{idx}}-{{tableNumber(p)}}">
-                <button type="button" class="btn" [class.btn-primary]="getGameWinner(tableNumber(p), idx) === 'p1'" [class.btn-outline-primary]="getGameWinner(tableNumber(p), idx) !== 'p1'" (click)="toggleGameWinner(tableNumber(p), idx, 'p1')" [disabled]="tournamentFinished">G{{idx+1}} P1</button>
-                <button type="button" class="btn" [class.btn-secondary]="getGameWinner(tableNumber(p), idx) === 'p2'" [class.btn-outline-secondary]="getGameWinner(tableNumber(p), idx) !== 'p2'" (click)="toggleGameWinner(tableNumber(p), idx, 'p2')" [disabled]="tournamentFinished">G{{idx+1}} P2</button>
-              </div>
-            </ng-container>
-          </div>
           <div class="totals small">
-            Totales: {{ getGamesCount(tableNumber(p)).p1 }} - {{ getGamesCount(tableNumber(p)).p2 }}
+            Totales: {{ totals.p1 }} - {{ totals.p2 }}
           </div>
         </div>
       </div>
@@ -140,11 +194,28 @@
           <tbody>
             <tr *ngFor="let p of leaderboard; let i = index">
               <td>{{ i + 1 }}</td>
-              <td>{{ p.name }}</td>
+              <td>
+                <div class="player-name-edit">
+                  <span>{{ p.name }}</span>
+                  <button
+                    type="button"
+                    class="btn btn-link p-0 edit-score-btn"
+                    (click)="openPlayerResultEditor(p)"
+                    aria-label="Editar totales de {{ p.name }}"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
               <td class="text-center">{{ p.w }}</td>
               <td class="text-center">{{ p.l }}</td>
               <td class="text-center">{{ p.t }}</td>
-              <td class="text-center"><strong>{{ p.points }}</strong></td>
+              <td class="text-center">
+                <strong>{{ p.points }}</strong>
+                <span *ngIf="resultOverrides[p.personId]" class="badge bg-light text-dark ms-1">Ajustado</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -152,6 +223,45 @@
       <ng-template #noLeaderboard>
         <div class="text-muted">No hay datos de resultados finales para este torneo.</div>
       </ng-template>
+    </div>
+  </div>
+
+  <div *ngIf="editingPlayerResult" class="card score-editor-card mb-3">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h5 class="mb-1">Editar totales — {{ editingPlayerResult.name }}</h5>
+          <small class="text-muted">Ajusta victorias, derrotas y empates globales.</small>
+        </div>
+        <button type="button" class="btn-close" aria-label="Cerrar" (click)="cancelPlayerResultEditor()" [disabled]="resultEditSaving"></button>
+      </div>
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">Victorias (W)</label>
+          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.w" [ngModelOptions]="{ standalone: true }" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Derrotas (L)</label>
+          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.l" [ngModelOptions]="{ standalone: true }" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Empates (T)</label>
+          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.t" [ngModelOptions]="{ standalone: true }" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Motivo</label>
+          <textarea class="form-control" rows="2" maxlength="140" [(ngModel)]="editingPlayerResult.reason" [ngModelOptions]="{ standalone: true }"></textarea>
+        </div>
+      </div>
+      <div *ngIf="resultEditError" class="alert alert-danger mt-3 mb-0">
+        {{ resultEditError }}
+      </div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn btn-outline-secondary" type="button" (click)="cancelPlayerResultEditor()" [disabled]="resultEditSaving">Cancelar</button>
+        <button class="btn btn-primary" type="button" (click)="savePlayerResultEdit()" [disabled]="resultEditSaving">
+          {{ resultEditSaving ? 'Guardando...' : 'Guardar totales' }}
+        </button>
+      </div>
     </div>
   </div>
 

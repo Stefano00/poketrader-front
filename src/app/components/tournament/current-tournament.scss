@@ -61,25 +61,59 @@
     }
   }
 
+  .game-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .game-radio {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0;
+
+    .form-check-input {
+      margin-top: 0;
+    }
+  }
+
+  .edit-score-btn {
+    color: #6c757d;
+    text-decoration: none;
+
+    &:hover:not(:disabled) {
+      color: #343a40;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
   .pairing-games {
     display: flex;
     flex-direction: column;
     gap: 8px;
-
-    .game-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-
-      .btn-group {
-        flex: 1 1 calc(50% - 8px);
-        min-width: 120px;
-      }
-    }
   }
 
   .final-results {
     overflow-x: auto;
+  }
+
+  .score-editor-card {
+    border: 1px dashed #d1d5db;
+
+    textarea {
+      resize: vertical;
+    }
+  }
+
+  .player-name-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   @media (max-width: 992px) {
@@ -118,11 +152,14 @@
       margin-bottom: 1.5rem;
     }
 
-    .pairing-games .game-buttons {
-      .btn-group {
-        flex: 1 1 100%;
-        min-width: 0;
-      }
+    .pairing-players .player-line {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .pairings-mobile .game-radio-group {
+      width: 100%;
+      justify-content: flex-start;
     }
   }
 

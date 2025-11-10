@@ -1,13 +1,15 @@
 import { TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { TcgplayerService } from './tcgplayer';
 
-import { Tcgplayer } from './tcgplayer';
-
-describe('Tcgplayer', () => {
-  let service: Tcgplayer;
+describe('TcgplayerService', () => {
+  let service: TcgplayerService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
-    service = TestBed.inject(Tcgplayer);
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule]
+    });
+    service = TestBed.inject(TcgplayerService);
   });
 
   it('should be created', () => {

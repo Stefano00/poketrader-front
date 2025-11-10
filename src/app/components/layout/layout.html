@@ -50,6 +50,16 @@
         >
           <mat-icon>menu</mat-icon>
         </button>
+      } @else {
+        <button
+          type="button"
+          aria-label="Ocultar menú"
+          mat-icon-button
+          class="menu-button"
+          (click)="toggleDrawer()"
+        >
+          <mat-icon>{{ desktopDrawerOpen ? 'chevron_left' : 'chevron_right' }}</mat-icon>
+        </button>
       }
       <span class="app-title">PokéTrader</span>
       
