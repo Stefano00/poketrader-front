@@ -69,6 +69,10 @@ export class CurrentTournament implements OnInit {
   editingPlayerResult: { personId: string; name: string; w: number; l: number; t: number; reason: string } | null = null;
   resultEditError: string | null = null;
   resultEditSaving = false;
+  savingMatches = false;
+
+  private dirtyTables = new Set<number>();
+  private readonly draftStoragePrefix = 'current-tournament-draft:';
 
   constructor(private route: ActivatedRoute, private router: Router) {}
 
@@ -101,7 +105,10 @@ export class CurrentTournament implements OnInit {
         this.round = 1;
       }
       await this.checkHasSavedMatches();
-      this.randomizePairings();
+      const restored = this.restoreDraftState();
+      if (!restored) {
+        this.randomizePairings();
+      }
       // try to restore countdown from persistence
       await this.loadCountdownState();
     }
@@ -261,6 +268,7 @@ export class CurrentTournament implements OnInit {
     const p2 = (sel.games || []).filter(g => g === 'p2').length;
     sel.scoreP1 = p1;
     sel.scoreP2 = p2;
+    this.updateDirtyStateForTable(table);
   }
 
   getGamesCount(table: number) {
@@ -361,6 +369,8 @@ export class CurrentTournament implements OnInit {
       this.matchSelections[tbl] = { scoreP1: null, scoreP2: null, round: nextRound, games: Array(this.bestOf).fill(null) };
       (p as any)._saved = false;
     }
+    this.dirtyTables.clear();
+    this.clearDraftState();
     // update internal round
     this.round = nextRound;
     
@@ -487,7 +497,7 @@ export class CurrentTournament implements OnInit {
     }
   }
 
-  randomizePairings() {
+  randomizePairings(preserveDraft: boolean = false) {
     const arr = [...this.participants];
     for (let i = arr.length -1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i+1));
@@ -505,6 +515,10 @@ export class CurrentTournament implements OnInit {
     for (const p of this.pairings) {
       this.matchSelections[p.table || 0] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
       (p as any)._saved = false;
+    }
+    if (!preserveDraft) {
+      this.dirtyTables.clear();
+      this.clearDraftState();
     }
   }
 
@@ -600,7 +614,9 @@ export class CurrentTournament implements OnInit {
       }
       // mark as not saved since we've cleared the form
       (p as any)._saved = false;
+      this.clearTableDirty(tbl);
     }
+    this.persistDraftState();
   }
 
   // fullscreen exit on Esc
@@ -762,16 +778,7 @@ export class CurrentTournament implements OnInit {
 
   // Validate whether there are changes to save and whether every table has at least one win recorded
   hasChanges(): boolean {
-    for (const p of this.pairings) {
-      const tbl = Number(p.table || 0);
-      const sel = this.matchSelections[tbl];
-      if (!sel) continue;
-      const points1 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p1').length || Number(sel.scoreP1 || 0);
-      const points2 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p2').length || Number(sel.scoreP2 || 0);
-      // if any table has some points and not already marked saved => we have changes
-      if ((points1 + points2) > 0 && !(p as any)._saved) return true;
-    }
-    return false;
+    return this.dirtyTables.size > 0;
   }
 
   validateAllTables(): { ok: boolean; message?: string } {
@@ -790,6 +797,9 @@ export class CurrentTournament implements OnInit {
   saveAllMatches(continueAfter: boolean = false) {
     this.pendingContinueAfterSave = continueAfter;
     this.saveErrorMessage = null;
+    if (this.savingMatches) {
+      return;
+    }
     if (!this.hasChanges()) {
       if (!continueAfter) {
         this.saveErrorMessage = 'No hay cambios para guardar.';
@@ -808,7 +818,7 @@ export class CurrentTournament implements OnInit {
   }
 
   async saveAndContinue() {
-    if (this.tournamentFinished) return;
+    if (this.tournamentFinished || this.savingMatches) return;
     if (this.hasChanges()) {
       this.saveAllMatches(true);
       return;
@@ -886,13 +896,26 @@ export class CurrentTournament implements OnInit {
 
   // final confirmation from modal (single step)
   async confirmSaveFromModal() {
+    if (this.savingMatches) return;
+    this.saveErrorMessage = null;
     try {
-      await this.performSaveAllMatches();
+      const result = await this.performSaveAllMatches();
+      if (result.failed > 0) {
+        this.saveErrorMessage = `No se pudieron guardar ${result.failed} mesa(s). Revisa tu conexión e inténtalo de nuevo.`;
+        return;
+      }
+      if (result.saved === 0) {
+        this.saveErrorMessage = 'No hay cambios para guardar.';
+        return;
+      }
       this.showSaveModal = false;
       this.saveErrorMessage = null;
       if (this.pendingContinueAfterSave && this.canContinue()) {
         await this.continueNextRound();
       }
+    } catch (err) {
+      console.error('Error saving matches', err);
+      this.saveErrorMessage = 'Ocurrió un error al guardar. Intenta nuevamente.';
     } finally {
       this.pendingContinueAfterSave = false;
     }
@@ -1121,31 +1144,59 @@ export class CurrentTournament implements OnInit {
   }
 
   // Actual saving logic (used after final confirmation)
-  async performSaveAllMatches() {
-    if (!this.tournamentId) return;
-    if (this.tournamentFinished) {
-      console.warn('Tournament is finished; cannot save matches.');
-      return;
+  async performSaveAllMatches(): Promise<{ saved: number; failed: number }> {
+    if (!this.tournamentId || this.tournamentFinished) {
+      return { saved: 0, failed: 0 };
     }
-    let saved = 0;
-    for (const p of this.pairings) {
-      const tbl = Number(p.table || 0);
-      const outcome = this.buildMatchOutcome(p, tbl);
-      if (!outcome) continue;
-      try {
-        await this.upsertMatchDocument(p, tbl, outcome);
-        (p as any)._saved = true;
-        saved++;
-      } catch (err) {
-        console.error('Error saving match for table', tbl, err);
+    if (this.savingMatches) {
+      return { saved: 0, failed: 0 };
+    }
+    const tablesToSave = Array.from(this.dirtyTables.values());
+    if (tablesToSave.length === 0) {
+      return { saved: 0, failed: 0 };
+    }
+    this.savingMatches = true;
+    try {
+      const results = await Promise.all(
+        tablesToSave.map(async (tbl) => {
+          const pairing = this.getPairingByTable(tbl);
+          if (!pairing) {
+            console.warn('No pairing found for table', tbl);
+            return { ok: false, table: tbl };
+          }
+          const outcome = this.buildMatchOutcome(pairing, tbl);
+          if (!outcome) {
+            console.warn('No outcome computed for table', tbl);
+            return { ok: false, table: tbl };
+          }
+          try {
+            await this.upsertMatchDocument(pairing, tbl, outcome);
+            (pairing as any)._saved = true;
+            this.clearTableDirty(tbl);
+            return { ok: true, table: tbl };
+          } catch (err) {
+            console.error('Error saving match for table', tbl, err);
+            return { ok: false, table: tbl, error: err };
+          }
+        })
+      );
+      const saved = results.filter(r => r.ok).length;
+      const failed = results.length - saved;
+      if (this.dirtyTables.size === 0) {
+        this.clearDraftState();
+      } else {
+        this.persistDraftState();
       }
-    }
-    if (saved > 0) {
-      console.info('Saved matches:', saved);
-      await this.buildWLTMap();
-      // refresh saved-match indicator and tournament meta
-      await this.checkHasSavedMatches();
-      await this.loadTournamentMeta();
+      if (saved > 0) {
+        console.info('Saved matches:', saved);
+        await this.buildWLTMap();
+        // refresh saved-match indicator and tournament meta
+        await this.checkHasSavedMatches();
+        await this.loadTournamentMeta();
+      }
+      return { saved, failed };
+    } finally {
+      this.savingMatches = false;
     }
   }
 
@@ -1170,6 +1221,7 @@ export class CurrentTournament implements OnInit {
       this.matchSelections[k].scoreP2 = val;
       if (this.matchSelections[k].scoreP1 === val) this.matchSelections[k].scoreP1 = null;
     }
+    this.updateDirtyStateForTable(table);
   }
 
   // round helpers (work with the numeric score shape)
@@ -1205,6 +1257,213 @@ export class CurrentTournament implements OnInit {
   }
 
   // ===== Display Update Methods =====
+  private getDraftStorage(): Storage | null {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  private draftStorageKey(): string | null {
+    if (!this.tournamentId) return null;
+    return `${this.draftStoragePrefix}${this.tournamentId}`;
+  }
+
+  private persistDraftState() {
+    const storage = this.getDraftStorage();
+    const key = this.draftStorageKey();
+    if (!storage || !key) return;
+    if (this.dirtyTables.size === 0) {
+      storage.removeItem(key);
+      return;
+    }
+    const selections: Record<string, any> = {};
+    for (const tbl of this.dirtyTables) {
+      const sel = this.matchSelections[tbl];
+      if (!sel) continue;
+      const pairing = this.getPairingByTable(tbl);
+      selections[String(tbl)] = {
+        scoreP1: sel.scoreP1 ?? null,
+        scoreP2: sel.scoreP2 ?? null,
+        round: Number(sel.round ?? this.round) || this.round,
+        games: Array.isArray(sel.games) ? [...sel.games] : [],
+        players: pairing ? {
+          p1Id: pairing.p1 && pairing.p1.id != null ? String(pairing.p1.id) : null,
+          p2Id: pairing.p2 && pairing.p2.id != null ? String(pairing.p2.id) : null
+        } : null
+      };
+    }
+    const pairingsSnapshot = (this.pairings || []).map((p, idx) => ({
+      table: p.table ?? (idx + 1),
+      p1: p.p1 ? { id: p.p1.id ?? null, name: p.p1.name ?? (p.p1.id ?? 'BYE') } : null,
+      p2: p.p2 ? { id: p.p2.id ?? null, name: p.p2.name ?? (p.p2.id ?? 'BYE') } : null
+    }));
+    const payload = {
+      round: this.round,
+      bestOf: this.bestOf,
+      selections,
+      pairings: pairingsSnapshot,
+      updatedAt: Date.now()
+    };
+    try {
+      storage.setItem(key, JSON.stringify(payload));
+    } catch (err) {
+      console.warn('Could not persist draft state', err);
+    }
+  }
+
+  private clearDraftState() {
+    const storage = this.getDraftStorage();
+    const key = this.draftStorageKey();
+    if (!storage || !key) return;
+    try {
+      storage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+
+  private restoreDraftState(): boolean {
+    const storage = this.getDraftStorage();
+    const key = this.draftStorageKey();
+    if (!storage || !key) return false;
+    let raw: string | null = null;
+    try {
+      raw = storage.getItem(key);
+    } catch {
+      return false;
+    }
+    if (!raw) return false;
+    try {
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return false;
+      let restored = false;
+      if (Array.isArray(data.pairings) && data.pairings.length > 0) {
+        this.applyDraftPairings(data.pairings);
+        restored = true;
+      } else if (!this.pairings || this.pairings.length === 0) {
+        this.randomizePairings(true);
+      }
+      if (data.round) {
+        const parsedRound = Number(data.round);
+        if (!isNaN(parsedRound) && parsedRound > 0) this.round = parsedRound;
+      }
+      const selections = data.selections || {};
+      for (const entryKey of Object.keys(selections)) {
+        const tbl = Number(entryKey);
+        if (!tbl) continue;
+        const entry = selections[entryKey];
+        const pairing = this.getPairingByTable(tbl);
+        if (pairing && entry?.players) {
+          const currentP1 = pairing.p1 && pairing.p1.id != null ? String(pairing.p1.id) : null;
+          const currentP2 = pairing.p2 && pairing.p2.id != null ? String(pairing.p2.id) : null;
+          const storedP1 = entry.players.p1Id != null ? String(entry.players.p1Id) : null;
+          const storedP2 = entry.players.p2Id != null ? String(entry.players.p2Id) : null;
+          if (currentP1 !== storedP1 || currentP2 !== storedP2) {
+            continue;
+          }
+        }
+        const sel = this.ensureMatchSelection(tbl);
+        sel.scoreP1 = entry.scoreP1 ?? null;
+        sel.scoreP2 = entry.scoreP2 ?? null;
+        sel.round = Number(entry.round ?? this.round) || this.round;
+        sel.games = this.normalizeGames(entry.games);
+        this.markTableDirty(tbl);
+        restored = true;
+      }
+      if (restored) {
+        this.persistDraftState();
+      }
+      return restored;
+    } catch (err) {
+      console.warn('Failed to restore draft state', err);
+      this.clearDraftState();
+      return false;
+    }
+  }
+
+  private applyDraftPairings(entries: Array<any>) {
+    if (!Array.isArray(entries) || entries.length === 0) return;
+    const normalized = entries.map((entry: any, idx: number) => {
+      const tableNum = Number(entry?.table ?? (idx + 1));
+      const p1 = this.rehydratePlayer(entry?.p1);
+      const p2 = this.rehydratePlayer(entry?.p2);
+      return { p1, p2, table: tableNum };
+    });
+    if (normalized.length === 0) return;
+    this.pairings = normalized;
+    this.matchSelections = {};
+    for (const p of this.pairings) {
+      const tbl = Number(p.table || 0);
+      this.matchSelections[tbl] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
+      (p as any)._saved = false;
+    }
+  }
+
+  private rehydratePlayer(snapshot: any): { id: string | null; name: string } | null {
+    if (!snapshot) return null;
+    const id = snapshot.id !== undefined && snapshot.id !== null ? String(snapshot.id) : null;
+    if (!id) {
+      return null;
+    }
+    const found = this.participants.find(p => p && p.id !== undefined && p.id !== null && String(p.id) === id);
+    return { id, name: found?.name || snapshot.name || id };
+  }
+
+  private normalizeGames(games: any): Array<'p1'|'p2'|null> {
+    const normalized: Array<'p1'|'p2'|null> = Array(this.bestOf).fill(null);
+    if (!Array.isArray(games)) {
+      return normalized;
+    }
+    for (let i = 0; i < normalized.length; i++) {
+      const val = games[i];
+      normalized[i] = val === 'p1' || val === 'p2' ? val : null;
+    }
+    return normalized;
+  }
+
+  private getPairingByTable(table: number): any | null {
+    const tbl = Number(table || 0);
+    if (!tbl || !this.pairings) return null;
+    return this.pairings.find(p => Number(p.table || 0) === tbl) || null;
+  }
+
+  private markTableDirty(table: number) {
+    const tbl = Number(table || 0);
+    if (!tbl) return;
+    this.dirtyTables.add(tbl);
+    const pairing = this.getPairingByTable(tbl);
+    if (pairing) {
+      (pairing as any)._saved = false;
+    }
+  }
+
+  private clearTableDirty(table: number) {
+    const tbl = Number(table || 0);
+    if (!tbl) return;
+    this.dirtyTables.delete(tbl);
+  }
+
+  private updateDirtyStateForTable(table: number) {
+    const tbl = Number(table || 0);
+    if (!tbl) return;
+    const sel = this.matchSelections[tbl];
+    if (!sel) return;
+    const totalGames = Array.isArray(sel.games) ? sel.games.filter(g => g === 'p1' || g === 'p2').length : 0;
+    const manualPoints = Number(sel.scoreP1 || 0) + Number(sel.scoreP2 || 0);
+    const hasData = totalGames > 0 || manualPoints > 0;
+    if (hasData) {
+      this.markTableDirty(tbl);
+    } else {
+      this.clearTableDirty(tbl);
+    }
+    this.persistDraftState();
+  }
+
   private startDisplayUpdate() {
     // Clear any existing display interval
     this.stopDisplayUpdate();

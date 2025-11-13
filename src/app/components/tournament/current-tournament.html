@@ -31,7 +31,9 @@
     <button class="btn btn-success action-btn" (click)="startCountdown()" [disabled]="tournamentFinished">Comenzar</button>
     <button class="btn btn-secondary action-btn" (click)="openResetModal()" title="Resetear sólo los controles de resultado" [disabled]="tournamentFinished">Reset</button>
     <button class="btn btn-outline-secondary action-btn" (click)="stopCountdown()" [disabled]="tournamentFinished">Detener</button>
-    <button class="btn btn-primary action-btn" (click)="saveAndContinue()" [disabled]="tournamentFinished || (!hasChanges() && !canContinue())" title="Guarda resultados y avanza cuando la ronda está lista">Guardar y continuar</button>
+    <button class="btn btn-primary action-btn" (click)="saveAndContinue()" [disabled]="tournamentFinished || savingMatches || (!hasChanges() && !canContinue())" title="Guarda resultados y avanza cuando la ronda está lista">
+      {{ savingMatches ? 'Guardando...' : 'Guardar y continuar' }}
+    </button>
     <button class="btn btn-danger ms-auto action-btn finalize-btn" (click)="openFinalizeModal()" [disabled]="!hasAnySavedMatches || tournamentFinished">Finalizar torneo</button>
   </div>
 
@@ -285,8 +287,10 @@
         <p>Estás a punto de guardar todas las mesas. Haz clic en "Confirmar" para proceder.</p>
       </ng-container>
       <div class="d-flex justify-content-end gap-2">
-        <button class="btn btn-secondary" (click)="cancelSaveModal()">Cancelar</button>
-  <button class="btn btn-primary" (click)="confirmSaveFromModal()">Confirmar</button>
+        <button class="btn btn-secondary" (click)="cancelSaveModal()" [disabled]="savingMatches">Cancelar</button>
+  <button class="btn btn-primary" (click)="confirmSaveFromModal()" [disabled]="savingMatches">
+    {{ savingMatches ? 'Guardando...' : 'Confirmar' }}
+  </button>
       </div>
     </div>
   </div>
