@@ -26,6 +26,13 @@ export class CreatePerson implements OnInit {
     va_nickname: '',
     fe_birth_date: ''
   };
+  searchTerm: string = '';
+
+  get filteredPersons() {
+    if (!this.searchTerm) return this.persons;
+    const lower = this.searchTerm.toLowerCase();
+    return this.persons.filter(p => (p.name || '').toLowerCase().includes(lower));
+  }
 
   ngOnInit(): void {
     this.loadPersons();
@@ -49,7 +56,7 @@ export class CreatePerson implements OnInit {
           va_name: person.name || '',
           va_email: person.email || '',
           va_nickname: person.nickname || '',
-          fe_birth_date: person.raw?.fe_birth_date ? (person.birthDate ? new Date(person.birthDate).toISOString().slice(0,10) : '') : ''
+          fe_birth_date: person.raw?.fe_birth_date ? (person.birthDate ? new Date(person.birthDate).toISOString().slice(0, 10) : '') : ''
         };
       } else {
         this.editingId = null;
@@ -109,7 +116,7 @@ export class CreatePerson implements OnInit {
   closeDeleteModal() {
     try {
       this.deleteModalInstance?.hide();
-    } catch {}
+    } catch { }
     setTimeout(() => {
       document.querySelectorAll('.modal-backdrop').forEach(n => n.remove());
       document.body.classList.remove('modal-open');

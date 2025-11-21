@@ -1,4 +1,5 @@
 import { Component, OnInit, HostListener } from '@angular/core';
+import { buildSwissPairs, pairKey, BYE_ID, PlayerStats } from './pairing-utils';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -24,10 +25,10 @@ type MatchOutcome = {
 })
 export class CurrentTournament implements OnInit {
   tournamentId: string | null = null;
-  participants: Array<{id:string,name:string}> = [];
+  participants: Array<{ id: string, name: string, nickname?: string | null }> = [];
 
-  pairings: Array<{p1:any,p2:any,table?:number}> = [];
-  private readonly BYE_ID = '__BYE__';
+  pairings: Array<{ p1: any, p2: any, table?: number }> = [];
+  private readonly BYE_ID = BYE_ID;
 
   // countdown (minutes)
   countdownMinutes = 1;
@@ -44,7 +45,7 @@ export class CurrentTournament implements OnInit {
   // selection state for matches keyed by table_number
   // each match stores numeric scores for p1 and p2 (0..2) and round
   // scores are nullable: each match has per-game winners stored in `games` (length = bestOf)
-  matchSelections: Record<number, { scoreP1: number | null, scoreP2: number | null, round: number, games?: Array<'p1'|'p2'|null> }> = {};
+  matchSelections: Record<number, { scoreP1: number | null, scoreP2: number | null, round: number, games?: Array<'p1' | 'p2' | null> }> = {};
 
   // default round number for saved matches
   round = 1;
@@ -52,12 +53,13 @@ export class CurrentTournament implements OnInit {
   // best_of (number of games per match). Default 3 (best of 3).
   bestOf = 3;
 
-  // W/L/T summary map: personId -> { w: number, l: number, t: number }
-  wltMap: Record<string, { w:number, l:number, t:number }> = {};
-  private rawWltMap: Record<string, { w:number, l:number, t:number }> = {};
+  // W/L/T summary map: personId -> { w: number, l: number, t: number, gameWins: number, gameLosses: number }
+  wltMap: Record<string, { w: number, l: number, t: number, gameWins: number, gameLosses: number }> = {};
+  private rawWltMap: Record<string, { w: number, l: number, t: number, gameWins: number, gameLosses: number }> = {};
 
   // UI
   showFullscreen = false;
+  showAliases = false;
   // tournament finished flag (from tournament doc bo_is_finished)
   tournamentFinished = false;
   // whether there is at least one saved match for this tournament
@@ -65,7 +67,7 @@ export class CurrentTournament implements OnInit {
   // leaderboard standings when tournament finished
   leaderboard: Array<{ personId: string, name: string, w: number, l: number, t: number, points: number }> = [];
   // leaderboard override UI
-  resultOverrides: Record<string, { w: number; l: number; t: number; points: number; reason?: string; base?: { w:number; l:number; t:number }; delta?: { w:number; l:number; t:number } }> = {};
+  resultOverrides: Record<string, { w: number; l: number; t: number; points: number; reason?: string; base?: { w: number; l: number; t: number }; delta?: { w: number; l: number; t: number } }> = {};
   editingPlayerResult: { personId: string; name: string; w: number; l: number; t: number; reason: string } | null = null;
   resultEditError: string | null = null;
   resultEditSaving = false;
@@ -74,7 +76,7 @@ export class CurrentTournament implements OnInit {
   private dirtyTables = new Set<number>();
   private readonly draftStoragePrefix = 'current-tournament-draft:';
 
-  constructor(private route: ActivatedRoute, private router: Router) {}
+  constructor(private route: ActivatedRoute, private router: Router) { }
 
   goBack() {
     try {
@@ -85,8 +87,8 @@ export class CurrentTournament implements OnInit {
     } catch (e) {
       // ignore
     }
-  // fallback to navigating to Tournament list
-  try { this.router.navigate(['/tournament']); } catch (e) { console.warn('goBack fallback failed', e); }
+    // fallback to navigating to Tournament list
+    try { this.router.navigate(['/tournament']); } catch (e) { console.warn('goBack fallback failed', e); }
   }
 
   async ngOnInit(): Promise<void> {
@@ -107,7 +109,7 @@ export class CurrentTournament implements OnInit {
       await this.checkHasSavedMatches();
       const restored = this.restoreDraftState();
       if (!restored) {
-        this.randomizePairings();
+        await this.randomizePairings();
       }
       // try to restore countdown from persistence
       await this.loadCountdownState();
@@ -145,9 +147,7 @@ export class CurrentTournament implements OnInit {
   }
 
   private pairKey(a: string, b: string) {
-    const x = String(a || '');
-    const y = String(b || '');
-    return x < y ? `${x}::${y}` : `${y}::${x}`;
+    return pairKey(a, b);
   }
 
   private async loadPastMatches(): Promise<{ previousPairs: Set<string>, maxRound: number }> {
@@ -180,7 +180,7 @@ export class CurrentTournament implements OnInit {
 
   // Build W/L/T map for current tournament from tournament_detail
   async buildWLTMap() {
-    const rawStats: Record<string, { w:number, l:number, t:number }> = {};
+    const rawStats: Record<string, { w: number, l: number, t: number, gameWins: number, gameLosses: number }> = {};
     if (!this.tournamentId) return;
     try {
       const db = getFirestore();
@@ -192,20 +192,34 @@ export class CurrentTournament implements OnInit {
         const winner = det['nm_winner_id'] || det['nm_winner'] || det['winner'];
         const loser = det['nm_loser_id'] || det['nm_loser'] || det['loser'];
         const tie = det['bo_tie'] === true;
-        const ids = [p1, p2].filter(x => x !== undefined && x !== null).map((x:any) => String(x));
+
+        const points1 = Number(det['nm_point_per_1'] || 0);
+        const points2 = Number(det['nm_point_per_2'] || 0);
+
+        const ids = [p1, p2].filter(x => x !== undefined && x !== null).map((x: any) => String(x));
         for (const id of ids) {
-          if (!rawStats[id]) rawStats[id] = { w:0,l:0,t:0 };
+          if (!rawStats[id]) rawStats[id] = { w: 0, l: 0, t: 0, gameWins: 0, gameLosses: 0 };
         }
+
+        if (p1) {
+          rawStats[String(p1)].gameWins += points1;
+          rawStats[String(p1)].gameLosses += points2;
+        }
+        if (p2) {
+          rawStats[String(p2)].gameWins += points2;
+          rawStats[String(p2)].gameLosses += points1;
+        }
+
         if (tie) {
           if (p1) rawStats[String(p1)].t += 1;
           if (p2) rawStats[String(p2)].t += 1;
         } else if (winner) {
           const win = String(winner);
           const los = loser ? String(loser) : null;
-          if (!rawStats[win]) rawStats[win] = { w:0,l:0,t:0 };
+          if (!rawStats[win]) rawStats[win] = { w: 0, l: 0, t: 0, gameWins: 0, gameLosses: 0 }; // Should exist already
           rawStats[win].w += 1;
           if (los) {
-            if (!rawStats[los]) rawStats[los] = { w:0,l:0,t:0 };
+            if (!rawStats[los]) rawStats[los] = { w: 0, l: 0, t: 0, gameWins: 0, gameLosses: 0 }; // Should exist already
             rawStats[los].l += 1;
           }
         }
@@ -215,7 +229,7 @@ export class CurrentTournament implements OnInit {
       this.resultOverrides = await this.loadResultOverrides();
       for (const pid of Object.keys(this.resultOverrides)) {
         const override = this.resultOverrides[pid];
-        const current = this.wltMap[pid] || { w:0,l:0,t:0 };
+        const current = this.wltMap[pid] || { w: 0, l: 0, t: 0, gameWins: 0, gameLosses: 0 };
         if (override.base) {
           current.w = Number(rawStats[pid]?.w || 0) + Number(override.delta?.w || 0);
           current.l = Number(rawStats[pid]?.l || 0) + Number(override.delta?.l || 0);
@@ -225,6 +239,9 @@ export class CurrentTournament implements OnInit {
           current.l = Number(override.l || 0);
           current.t = Number(override.t || 0);
         }
+        // We don't support overriding game wins yet, so just copy raw
+        current.gameWins = rawStats[pid]?.gameWins || 0;
+        current.gameLosses = rawStats[pid]?.gameLosses || 0;
         this.wltMap[pid] = current;
       }
       this.rebuildLeaderboard();
@@ -245,7 +262,7 @@ export class CurrentTournament implements OnInit {
   }
 
   // Per-game helpers
-  getGameWinner(table: number, gameIndex: number): 'p1'|'p2'|null {
+  getGameWinner(table: number, gameIndex: number): 'p1' | 'p2' | null {
     const sel = this.matchSelections[Number(table || 0)];
     if (!sel || !sel.games) return null;
     return sel.games[gameIndex] || null;
@@ -260,7 +277,7 @@ export class CurrentTournament implements OnInit {
     return sel;
   }
 
-  selectGameWinner(table: number, gameIndex: number, side: 'p1'|'p2') {
+  selectGameWinner(table: number, gameIndex: number, side: 'p1' | 'p2') {
     const sel = this.ensureMatchSelection(table);
     if (gameIndex < 0 || gameIndex >= this.bestOf) return;
     sel.games![gameIndex] = side;
@@ -273,25 +290,26 @@ export class CurrentTournament implements OnInit {
 
   getGamesCount(table: number) {
     const sel = this.matchSelections[Number(table || 0)];
-    if (!sel || !sel.games) return { p1:0, p2:0 };
+    if (!sel || !sel.games) return { p1: 0, p2: 0 };
     return { p1: (sel.games || []).filter(g => g === 'p1').length, p2: (sel.games || []).filter(g => g === 'p2').length };
   }
 
-  getPlayersForMatch(p: any): Array<{ id: string | null; name: string; side: 'p1'|'p2'; isBye: boolean }> {
-    const buildPlayer = (player: any, side: 'p1'|'p2') => {
+  getPlayersForMatch(p: any): Array<{ id: string | null; name: string; nickname?: string; side: 'p1' | 'p2'; isBye: boolean }> {
+    const buildPlayer = (player: any, side: 'p1' | 'p2') => {
       if (!player) {
         return { id: null, name: 'BYE', side, isBye: true };
       }
       const id = player.id !== undefined && player.id !== null ? String(player.id) : null;
       const name = player.name || (id ?? 'BYE');
-      return { id, name, side, isBye: false };
+      const nickname = player.nickname;
+      return { id, name, nickname, side, isBye: false };
     };
     return [buildPlayer(p?.p1, 'p1'), buildPlayer(p?.p2, 'p2')];
   }
 
   getPlayerRecord(id: string | null | undefined): { w: number; l: number; t: number } {
     if (!id) return { w: 0, l: 0, t: 0 };
-    const stats = this.wltMap[String(id)] || { w: 0, l: 0, t: 0 };
+    const stats = this.wltMap[String(id)] || { w: 0, l: 0, t: 0, gameWins: 0, gameLosses: 0 };
     return {
       w: Number(stats.w || 0),
       l: Number(stats.l || 0),
@@ -305,10 +323,15 @@ export class CurrentTournament implements OnInit {
     if (!this.tournamentId) return;
     const { previousPairs, maxRound } = await this.loadPastMatches();
     const nextRound = (maxRound || 0) + 1;
-    const participantMap = new Map<string, { id: string | number; name: string }>();
+
+    await this.performPairing(nextRound, previousPairs);
+  }
+
+  private async performPairing(roundNumber: number, previousPairs: Set<string>) {
+    const participantMap = new Map<string, { id: string | number; name: string; nickname?: string }>();
     for (const p of this.participants) {
       if (!p || p.id === undefined || p.id === null) continue;
-      participantMap.set(String(p.id), p);
+      participantMap.set(String(p.id), { ...p, nickname: p.nickname || undefined });
     }
     const participantIds = Array.from(participantMap.keys());
     if (participantIds.length === 0) return;
@@ -322,11 +345,32 @@ export class CurrentTournament implements OnInit {
       else if (b === this.BYE_ID && a) byeHistory.add(a);
     }
 
-    let resultPairs: Array<any> = [];
-    let computed = this.buildNonRepeatingPairs(participantIds, previousPairs, byeHistory, false);
-    if (!computed || computed.length === 0) {
-      computed = this.buildNonRepeatingPairs(participantIds, previousPairs, byeHistory, true);
+    // Build stats map for the pairing algorithm
+    const stats: Record<string, PlayerStats> = {};
+    for (const pid of participantIds) {
+      const s = this.wltMap[pid] || { w: 0, l: 0, t: 0, gameWins: 0, gameLosses: 0 };
+      // Calculate points: W=3, T=1 (or whatever the logic is). 
+      // The leaderboard uses: overridePoints != null ? overridePoints : (Number(stats.w || 0) * 3 + Number(stats.t || 0))
+      // We should reuse that logic or access the leaderboard if it's built.
+      // Let's rely on wltMap and resultOverrides which are already loaded.
+      const override = this.resultOverrides[pid];
+      const overridePoints = override ? Number(override.points ?? (override.w * 3 + override.t)) : null;
+      const points = overridePoints != null ? overridePoints : (Number(s.w || 0) * 3 + Number(s.t || 0));
+
+      stats[pid] = {
+        id: pid,
+        points,
+        w: Number(s.w || 0),
+        l: Number(s.l || 0),
+        t: Number(s.t || 0),
+        gameWins: Number(s.gameWins || 0),
+        gameLosses: Number(s.gameLosses || 0)
+      };
     }
+
+    // Use Swiss pairing
+    let resultPairs: Array<any> = [];
+    const computed = buildSwissPairs(participantIds, previousPairs, byeHistory, stats);
 
     if (computed && computed.length > 0) {
       resultPairs = computed.map((pair, idx) => {
@@ -366,92 +410,19 @@ export class CurrentTournament implements OnInit {
     this.matchSelections = {};
     for (const p of this.pairings) {
       const tbl = Number(p.table || 0);
-      this.matchSelections[tbl] = { scoreP1: null, scoreP2: null, round: nextRound, games: Array(this.bestOf).fill(null) };
+      this.matchSelections[tbl] = { scoreP1: null, scoreP2: null, round: roundNumber, games: Array(this.bestOf).fill(null) };
       (p as any)._saved = false;
     }
     this.dirtyTables.clear();
     this.clearDraftState();
     // update internal round
-    this.round = nextRound;
-    
+    this.round = roundNumber;
+
     // Reset countdown for new round
     this.resetCountdownForNewRound();
   }
 
-  private buildNonRepeatingPairs(
-    ids: string[],
-    previousPairs: Set<string>,
-    byeHistory: Set<string>,
-    allowByeRepeats: boolean
-  ): Array<{ p1Id: string; p2Id: string | null }> | null {
-    if (!ids || ids.length === 0) return [];
-    const baseIds = [...ids];
-    const attempts = Math.max(5, ids.length * 3);
 
-    const shuffleInPlace = (arr: string[]) => {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      return arr;
-    };
-
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const order = shuffleInPlace([...baseIds]);
-      const used = new Set<string>();
-      const result: Array<{ p1Id: string; p2Id: string | null }> = [];
-      const allowBye = order.length % 2 === 1;
-
-      const shuffle = (arr: string[]) => shuffleInPlace([...arr]);
-
-      const dfs = (): boolean => {
-        if (used.size === order.length) return true;
-
-        let candidate: string | undefined;
-        for (const id of order) {
-          if (!used.has(id)) { candidate = id; break; }
-        }
-        if (candidate === undefined) return true;
-        used.add(candidate);
-
-        const available: string[] = [];
-        for (const id of order) {
-          if (id === candidate || used.has(id)) continue;
-          available.push(id);
-        }
-
-        const preferred = shuffle(available.filter(id => !previousPairs.has(this.pairKey(candidate, id))));
-        const fallback = shuffle(available.filter(id => previousPairs.has(this.pairKey(candidate, id))));
-
-        for (const pool of [preferred, fallback]) {
-          for (const id of pool) {
-            used.add(id);
-            result.push({ p1Id: candidate, p2Id: id });
-            if (dfs()) return true;
-            result.pop();
-            used.delete(id);
-          }
-        }
-
-        if (allowBye && !result.some(p => p.p2Id === null)) {
-          const byeKey = this.BYE_ID;
-          const hadByeBefore = previousPairs.has(this.pairKey(candidate, byeKey)) || byeHistory.has(candidate);
-          if (!hadByeBefore || allowByeRepeats) {
-            result.push({ p1Id: candidate, p2Id: null });
-            if (dfs()) return true;
-            result.pop();
-          }
-        }
-
-        used.delete(candidate);
-        return false;
-      };
-
-      if (dfs()) return result;
-    }
-
-    return null;
-  }
 
   // can continue to the next round only when current round results have been saved for all tables
   canContinue(): boolean {
@@ -474,21 +445,23 @@ export class CurrentTournament implements OnInit {
   async loadParticipants(tournamentId: string) {
     try {
       const db = getFirestore();
-      const snap = await getDocs(query(collection(db, 'tournament_participants'), where('tournamentId','==', tournamentId)));
+      const snap = await getDocs(query(collection(db, 'tournament_participants'), where('tournamentId', '==', tournamentId)));
+
+      // Pre-fetch all persons to avoid N+1
+      const personSnap = await getDocs(collection(db, 'person_identity'));
+      const personMap = new Map<string, any>();
+      personSnap.docs.forEach(d => personMap.set(d.id, d.data()));
+
       this.participants = [];
       for (const d of snap.docs) {
         const pdata = d.data() as any;
         if (pdata.personId) {
-          // fetch person name
-          try {
-            const pd = await getDocs(collection(db,'person_identity'));
-            // naive: find doc matching id
-            const personDoc = pd.docs.find(x => x.id === pdata.personId);
-            const data = personDoc ? (personDoc.data() as any) : null;
-            this.participants.push({ id: pdata.personId, name: data ? (data['va_name'] || data['name'] || pdata.personId) : pdata.personId });
-          } catch (err) {
-            this.participants.push({ id: pdata.personId, name: pdata.personId });
-          }
+          const data = personMap.get(pdata.personId);
+          this.participants.push({
+            id: pdata.personId,
+            name: data ? (data['va_name'] || data['name'] || pdata.personId) : pdata.personId,
+            nickname: data ? (data['va_nickname'] || data['nickname']) : null
+          });
         }
       }
       this.rebuildLeaderboard();
@@ -497,28 +470,37 @@ export class CurrentTournament implements OnInit {
     }
   }
 
-  randomizePairings(preserveDraft: boolean = false) {
-    const arr = [...this.participants];
-    for (let i = arr.length -1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i+1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    const pairs: any[] = [];
-    let table = 1;
-    for (let i=0;i<arr.length;i+=2) {
-      pairs.push({ p1: arr[i], p2: arr[i+1] || null, table });
-      table++;
-    }
-    this.pairings = pairs;
-    // initialize selections
-    this.matchSelections = {};
-    for (const p of this.pairings) {
-      this.matchSelections[p.table || 0] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
-      (p as any)._saved = false;
-    }
-    if (!preserveDraft) {
-      this.dirtyTables.clear();
-      this.clearDraftState();
+  async randomizePairings(preserveDraft: boolean = false) {
+    if (this.round === 1) {
+      // Round 1: Pure random
+      const arr = [...this.participants];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      const pairs: any[] = [];
+      let table = 1;
+      for (let i = 0; i < arr.length; i += 2) {
+        pairs.push({ p1: arr[i], p2: arr[i + 1] || null, table });
+        table++;
+      }
+      this.pairings = pairs;
+      // initialize selections
+      this.matchSelections = {};
+      for (const p of this.pairings) {
+        this.matchSelections[p.table || 0] = { scoreP1: null, scoreP2: null, round: this.round, games: Array(this.bestOf).fill(null) };
+        (p as any)._saved = false;
+      }
+      if (!preserveDraft) {
+        this.dirtyTables.clear();
+        this.clearDraftState();
+      }
+    } else {
+      // Round > 1: Use Swiss logic (Reordenar)
+      // We need to load past matches to know who played who
+      const { previousPairs } = await this.loadPastMatches();
+      // We use the current round number
+      await this.performPairing(this.round, previousPairs);
     }
   }
 
@@ -534,7 +516,7 @@ export class CurrentTournament implements OnInit {
     if (!this.startTime) this.startTime = Date.now();
     // persist start if not already persisted
     if (!this.persistedStart) {
-      void this.persistCountdownStart().catch(() => {});
+      void this.persistCountdownStart().catch(() => { });
     }
     this.showFullscreen = true;
     this.intervalId = setInterval(() => {
@@ -548,7 +530,7 @@ export class CurrentTournament implements OnInit {
         if (this.lastHeartbeatMs === null) this.lastHeartbeatMs = now;
         if ((now - (this.lastHeartbeatMs || 0)) >= 10_000) {
           this.lastHeartbeatMs = now;
-          void this.persistCountdownHeartbeat(remaining).catch(() => {});
+          void this.persistCountdownHeartbeat(remaining).catch(() => { });
         }
       }
       // auto-stop when reaches -15:00 or less
@@ -556,7 +538,7 @@ export class CurrentTournament implements OnInit {
         this.stopCountdown('expired');
       }
     }, 200);
-    
+
     // Start display update interval (every second for UI)
     this.startDisplayUpdate();
   }
@@ -571,13 +553,17 @@ export class CurrentTournament implements OnInit {
     // Stop display update interval
     this.stopDisplayUpdate();
     // persist stop state
-    void this.persistCountdownStop(status).catch(() => {});
+    void this.persistCountdownStop(status).catch(() => { });
   }
 
   // Close fullscreen but keep countdown running
   closeFullscreen() {
     this.showFullscreen = false;
     // Keep everything else running
+  }
+
+  toggleFullscreen() {
+    this.showFullscreen = !this.showFullscreen;
   }
 
   // Reset countdown for new round
@@ -590,13 +576,13 @@ export class CurrentTournament implements OnInit {
     this.persistedStart = false;
     this.lastHeartbeatMs = null;
     // Clear any existing countdown data for this tournament
-    void this.clearCountdownState().catch(() => {});
+    void this.clearCountdownState().catch(() => { });
   }
 
-  resetAndRandomize() {
+  async resetAndRandomize() {
     // legacy: full reset and randomize (keeps existing behavior)
     this.stopCountdown();
-    this.randomizePairings();
+    await this.randomizePairings();
     this.elapsedSeconds = 0;
   }
 
@@ -644,7 +630,7 @@ export class CurrentTournament implements OnInit {
       const savedRound = Number(data.round || 0);
       // Only load countdown if it's for the current round
       if (savedRound !== this.round) return;
-      
+
       const running = !!data.running;
       const totalSeconds = Number(data.totalSeconds || (Number(this.countdownMinutes) || 0) * 60) || 0;
       const startAtMs = Number(data.startAtMs || 0) || 0;
@@ -764,7 +750,7 @@ export class CurrentTournament implements OnInit {
     const s = Math.abs(sec);
     const mm = Math.floor(s / 60);
     const ss = s % 60;
-    const padded = `${mm}:${ss.toString().padStart(2,'0')}`;
+    const padded = `${mm}:${ss.toString().padStart(2, '0')}`;
     return (neg ? '-' : '') + padded;
   }
 
@@ -786,8 +772,8 @@ export class CurrentTournament implements OnInit {
       const tbl = Number(p.table || 0);
       const sel = this.matchSelections[tbl];
       if (!sel) return { ok: false, message: `La mesa ${tbl} no tiene resultados` };
-      const points1 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p1').length || Number(sel.scoreP1 || 0);
-      const points2 = ((sel.games || []) as Array<any>).filter((g:any) => g === 'p2').length || Number(sel.scoreP2 || 0);
+      const points1 = ((sel.games || []) as Array<any>).filter((g: any) => g === 'p1').length || Number(sel.scoreP1 || 0);
+      const points2 = ((sel.games || []) as Array<any>).filter((g: any) => g === 'p2').length || Number(sel.scoreP2 || 0);
       if ((points1 + points2) === 0) return { ok: false, message: `La mesa ${tbl} debe tener al menos 1 victoria/derrota` };
     }
     return { ok: true };
@@ -861,10 +847,10 @@ export class CurrentTournament implements OnInit {
       if (this.hasChanges()) {
         await this.performSaveAllMatches();
       }
-      
+
       // Stop countdown when tournament is finalized
       this.stopCountdown('stopped');
-      
+
       const db = getFirestore();
       const tRef = doc(db, 'tournament', this.tournamentId);
       await updateDoc(tRef, { bo_is_finished: true });
@@ -882,7 +868,7 @@ export class CurrentTournament implements OnInit {
     try {
       // Stop countdown when tournament is finalized
       this.stopCountdown('stopped');
-      
+
       const db = getFirestore();
       const tRef = doc(db, 'tournament', this.tournamentId);
       await updateDoc(tRef, { bo_is_finished: true });
@@ -1117,7 +1103,7 @@ export class CurrentTournament implements OnInit {
       const docFactory = options?.docFn || doc;
       const setDocFn = options?.setDocFn || setDoc;
       const docRef = docFactory(db, 'tournament_result_adjustments', `${this.tournamentId}_${this.editingPlayerResult.personId}`);
-      const raw = this.rawWltMap[this.editingPlayerResult.personId] || { w:0,l:0,t:0 };
+      const raw = this.rawWltMap[this.editingPlayerResult.personId] || { w: 0, l: 0, t: 0 };
       const points = w * 3 + t;
       await setDocFn(docRef, {
         nm_tournament_id: this.tournamentId,
@@ -1201,14 +1187,14 @@ export class CurrentTournament implements OnInit {
   }
 
   // helpers to safely access/set scores from template
-  getScore(table: number, side: 'p1'|'p2'): number {
+  getScore(table: number, side: 'p1' | 'p2'): number {
     const k = Number(table || 0);
     const sel = this.matchSelections[k];
     if (!sel) return 0;
     return side === 'p1' ? Number(sel.scoreP1 || 0) : Number(sel.scoreP2 || 0);
   }
 
-  setScore(table: number, side: 'p1'|'p2', value: number) {
+  setScore(table: number, side: 'p1' | 'p2', value: number) {
     const k = Number(table || 0);
     if (!this.matchSelections[k]) this.matchSelections[k] = { scoreP1: 0, scoreP2: 0, round: this.round };
     const val = Number(value ?? 0);
@@ -1414,8 +1400,8 @@ export class CurrentTournament implements OnInit {
     return { id, name: found?.name || snapshot.name || id };
   }
 
-  private normalizeGames(games: any): Array<'p1'|'p2'|null> {
-    const normalized: Array<'p1'|'p2'|null> = Array(this.bestOf).fill(null);
+  private normalizeGames(games: any): Array<'p1' | 'p2' | null> {
+    const normalized: Array<'p1' | 'p2' | null> = Array(this.bestOf).fill(null);
     if (!Array.isArray(games)) {
       return normalized;
     }
@@ -1489,25 +1475,29 @@ export class CurrentTournament implements OnInit {
   }
 
   private rebuildLeaderboard() {
-    const standings: Record<string, { personId: string, name: string, w: number, l: number, t: number, points: number }> = {};
-    const participantMap = new Map<string, { id: string; name: string }>();
+    const standings: Record<string, { personId: string, name: string, nickname?: string, w: number, l: number, t: number, points: number }> = {};
+    const participantMap = new Map<string, { id: string; name: string; nickname?: string }>();
     for (const p of this.participants) {
       if (p && p.id !== undefined && p.id !== null) {
-        participantMap.set(String(p.id), { id: String(p.id), name: p.name || String(p.id) });
+        participantMap.set(String(p.id), { id: String(p.id), name: p.name || String(p.id), nickname: p.nickname || undefined });
       }
     }
     // initialize from participants
     for (const [pid, pdata] of participantMap.entries()) {
       const stats = this.wltMap[pid] || { w: 0, l: 0, t: 0 };
+      // use overrides if present
       const override = this.resultOverrides[pid];
       const overridePoints = override ? Number(override.points ?? (override.w * 3 + override.t)) : null;
+      const points = overridePoints != null ? overridePoints : (Number(stats.w || 0) * 3 + Number(stats.t || 0));
+
       standings[pid] = {
         personId: pid,
         name: pdata.name,
+        nickname: pdata.nickname,
         w: Number(stats.w || 0),
         l: Number(stats.l || 0),
         t: Number(stats.t || 0),
-        points: overridePoints != null ? overridePoints : (Number(stats.w || 0) * 3 + Number(stats.t || 0))
+        points
       };
     }
     // include anyone else present in wltMap (e.g., legacy data not in participants list)
@@ -1527,15 +1517,21 @@ export class CurrentTournament implements OnInit {
         };
       }
     }
-    this.leaderboard = Object.values(standings).sort((a, b) =>
-      (Number(b.points || 0) - Number(a.points || 0)) ||
-      (Number(b.w || 0) - Number(a.w || 0)) ||
-      String(a.name || '').localeCompare(String(b.name || ''))
-    );
+    this.leaderboard = Object.values(standings).sort((a, b) => {
+      const statA = this.wltMap[a.personId] || { gameWins: 0, gameLosses: 0 };
+      const statB = this.wltMap[b.personId] || { gameWins: 0, gameLosses: 0 };
+      const diffA = (statA.gameWins || 0) - (statA.gameLosses || 0);
+      const diffB = (statB.gameWins || 0) - (statB.gameLosses || 0);
+
+      return (Number(b.points || 0) - Number(a.points || 0)) ||
+        (diffB - diffA) ||
+        (Number(b.w || 0) - Number(a.w || 0)) ||
+        String(a.name || '').localeCompare(String(b.name || ''));
+    });
   }
 
-  private async loadResultOverrides(): Promise<Record<string, { w: number; l: number; t: number; points: number; reason?: string; base?: { w:number; l:number; t:number }; delta?: { w:number; l:number; t:number } }>> {
-    const overrides: Record<string, { w: number; l: number; t: number; points: number; reason?: string; base?: { w:number; l:number; t:number }; delta?: { w:number; l:number; t:number } }> = {};
+  private async loadResultOverrides(): Promise<Record<string, { w: number; l: number; t: number; points: number; reason?: string; base?: { w: number; l: number; t: number }; delta?: { w: number; l: number; t: number } }>> {
+    const overrides: Record<string, { w: number; l: number; t: number; points: number; reason?: string; base?: { w: number; l: number; t: number }; delta?: { w: number; l: number; t: number } }> = {};
     if (!this.tournamentId) return overrides;
     try {
       const db = getFirestore();
@@ -1568,5 +1564,11 @@ export class CurrentTournament implements OnInit {
       console.warn('No se pudieron cargar las ediciones de puntaje', err);
     }
     return overrides;
+  }
+
+  getDisplayName(p: any): string {
+    if (!p) return '';
+    if (this.showAliases && p.nickname) return p.nickname;
+    return p.name || p.id || '';
   }
 }

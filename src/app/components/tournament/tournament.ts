@@ -26,6 +26,13 @@ export class Tournament implements OnInit {
   selectedParticipants = new Set<string>();
   currentTournamentId: string | null = null;
   existingParticipantDocs: Record<string, string> = {}; // personId -> docId
+  searchTerm: string = '';
+
+  get filteredPersons() {
+    if (!this.searchTerm) return this.persons;
+    const lower = this.searchTerm.toLowerCase();
+    return this.persons.filter(p => (p.name || '').toLowerCase().includes(lower));
+  }
 
   private modalInstance: any = null;
   private participantsModalInstance: any = null;
@@ -90,7 +97,7 @@ export class Tournament implements OnInit {
       });
 
       // sort newest first (most recent date on top)
-      this.tournaments.sort((a:any,b:any) => Number(b.sortDate || 0) - Number(a.sortDate || 0));
+      this.tournaments.sort((a: any, b: any) => Number(b.sortDate || 0) - Number(a.sortDate || 0));
 
       // load participants for each tournament (populate participants array)
       await Promise.all(this.tournaments.map(async (t) => {
@@ -117,8 +124,8 @@ export class Tournament implements OnInit {
             await this.loadTournamentDetailsForTournament(t);
 
             // compute winners/losers summary from the normalized matches
-            const winnersMap: Record<string,string> = {};
-            const losersMap: Record<string,string> = {};
+            const winnersMap: Record<string, string> = {};
+            const losersMap: Record<string, string> = {};
             const matchesList = (t.matches && Array.isArray(t.matches)) ? t.matches : [];
             for (const m of matchesList) {
               if (m.tie) continue;
@@ -175,7 +182,7 @@ export class Tournament implements OnInit {
         this.formModel = {
           primaryKey: t.id,
           va_name: (t.raw && t.raw['va_name']) || t.name || '',
-          fe_tournament_date: (t.raw && t.raw['fe_tournament_date']) ? (((t.raw['fe_tournament_date'] as any).toDate) ? (t.raw['fe_tournament_date'] as any).toDate().toISOString().slice(0,10) : '') : '',
+          fe_tournament_date: (t.raw && t.raw['fe_tournament_date']) ? (((t.raw['fe_tournament_date'] as any).toDate) ? (t.raw['fe_tournament_date'] as any).toDate().toISOString().slice(0, 10) : '') : '',
           nm_tournament_detail: (t.raw && t.raw['nm_tournament_detail']) || 1,
           table_count: (t.raw && (t.raw['table_count'] ?? t.table_count)) || t.table_count || 0
         };
@@ -188,6 +195,7 @@ export class Tournament implements OnInit {
       }
       // load persons so the modal can display immediate participant selection
       await this.loadPersonsForSelection();
+      this.searchTerm = '';
       // initialize selectedParticipants set from existing tournament (when editing)
       this.selectedParticipants = new Set<string>();
       if (this.modalTournament && this.modalTournament.participants && this.modalTournament.participants.length > 0) {
@@ -204,7 +212,7 @@ export class Tournament implements OnInit {
   closeModal() {
     try {
       this.modalInstance?.hide();
-    } catch {}
+    } catch { }
     setTimeout(() => {
       document.querySelectorAll('.modal-backdrop').forEach(n => n.remove());
       document.body.classList.remove('modal-open');
@@ -290,7 +298,7 @@ export class Tournament implements OnInit {
   }
 
   closeDeleteModal() {
-    try { this.deleteModalInstance?.hide(); } catch {}
+    try { this.deleteModalInstance?.hide(); } catch { }
     setTimeout(() => { document.querySelectorAll('.modal-backdrop').forEach(n => n.remove()); document.body.classList.remove('modal-open'); }, 100);
   }
 
@@ -320,6 +328,7 @@ export class Tournament implements OnInit {
     try {
       this.currentTournamentId = tournament.id;
       await this.loadPersonsForSelection();
+      this.searchTerm = '';
       // load existing mappings
       this.existingParticipantDocs = {};
       this.selectedParticipants = new Set<string>();
@@ -347,21 +356,21 @@ export class Tournament implements OnInit {
   }
 
   closeManageParticipants() {
-    try { this.participantsModalInstance?.hide(); } catch {}
+    try { this.participantsModalInstance?.hide(); } catch { }
     setTimeout(() => { document.querySelectorAll('.modal-backdrop').forEach(n => n.remove()); document.body.classList.remove('modal-open'); }, 100);
   }
 
   togglePersonSelection(personId: string, checked: boolean) {
     if (checked) this.selectedParticipants.add(personId); else this.selectedParticipants.delete(personId);
     console.log("Actualizando participantes {}", this.selectedParticipants);
-    
-        try {
-          const newCount = Math.ceil(this.selectedParticipants.size / 2);
-          if (this.formModel) this.formModel.table_count = newCount;
-          // also update modalTournament's participants array for immediate UI reflection
-          this.modalTournament.participants = Array.from(this.selectedParticipants).map(pid => ({ personId: pid }));
-        } catch (e) {}
-      
+
+    try {
+      const newCount = Math.ceil(this.selectedParticipants.size / 2);
+      if (this.formModel) this.formModel.table_count = newCount;
+      // also update modalTournament's participants array for immediate UI reflection
+      this.modalTournament.participants = Array.from(this.selectedParticipants).map(pid => ({ personId: pid }));
+    } catch (e) { }
+
   }
 
   async saveParticipants() {
@@ -397,7 +406,7 @@ export class Tournament implements OnInit {
           if (this.formModel) this.formModel.table_count = newCount;
           // also update modalTournament's participants array for immediate UI reflection
           this.modalTournament.participants = Array.from(this.selectedParticipants).map(pid => ({ personId: pid }));
-        } catch (e) {}
+        } catch (e) { }
       }
       this.closeManageParticipants();
     } catch (err) {
@@ -477,7 +486,7 @@ export class Tournament implements OnInit {
           for (const d of snap2.docs) {
             if (!docs.find(x => x.id === d.id)) docs.push(d);
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const matches: any[] = [];
@@ -516,25 +525,25 @@ export class Tournament implements OnInit {
         }
       }
 
-      const normalized = Array.from(uniqueMap.values()).sort((a:any,b:any) => (Number(a.round || 0) - Number(b.round || 0)) || (Number(a.table_number || 0) - Number(b.table_number || 0)));
-      console.debug('loadTournamentDetailsForTournament: normalized matches for', t.id, normalized.map(m => ({ id: m.id, round: m.round, table_number: m.table_number, raw: !!m._raw }))); 
+      const normalized = Array.from(uniqueMap.values()).sort((a: any, b: any) => (Number(a.round || 0) - Number(b.round || 0)) || (Number(a.table_number || 0) - Number(b.table_number || 0)));
+      console.debug('loadTournamentDetailsForTournament: normalized matches for', t.id, normalized.map(m => ({ id: m.id, round: m.round, table_number: m.table_number, raw: !!m._raw })));
       t.matches = normalized;
 
       // build leaderboard: { personId, name, w, l, t, points }
       try {
-        const lbMap: Record<string, { personId: string, name: string, w:number, l:number, t:number, points:number }> = {};
+        const lbMap: Record<string, { personId: string, name: string, w: number, l: number, t: number, points: number }> = {};
         // include participants explicitly so players with zero matches appear
         if (t.participants && Array.isArray(t.participants)) {
           for (const p of t.participants) {
-            if (p && p.personId) lbMap[String(p.personId)] = { personId: String(p.personId), name: p.name || String(p.personId), w:0,l:0,t:0,points:0 };
+            if (p && p.personId) lbMap[String(p.personId)] = { personId: String(p.personId), name: p.name || String(p.personId), w: 0, l: 0, t: 0, points: 0 };
           }
         }
         for (const m of normalized) {
           const a = String(m.p1 || '');
           const b = String(m.p2 || '');
           // ensure entries exist
-          if (a && !lbMap[a]) lbMap[a] = { personId: a, name: m.name1 || a, w:0,l:0,t:0,points:0 };
-          if (b && !lbMap[b]) lbMap[b] = { personId: b, name: m.name2 || b, w:0,l:0,t:0,points:0 };
+          if (a && !lbMap[a]) lbMap[a] = { personId: a, name: m.name1 || a, w: 0, l: 0, t: 0, points: 0 };
+          if (b && !lbMap[b]) lbMap[b] = { personId: b, name: m.name2 || b, w: 0, l: 0, t: 0, points: 0 };
           if (m.tie) {
             if (a) { lbMap[a].t += 1; lbMap[a].points += 1; }
             if (b) { lbMap[b].t += 1; lbMap[b].points += 1; }
@@ -546,7 +555,7 @@ export class Tournament implements OnInit {
           }
         }
         // transform to array and sort by points desc, then w desc, then name
-        t.leaderboard = Object.keys(lbMap).map(k => lbMap[k]).sort((x:any,y:any) => (Number(y.points || 0) - Number(x.points || 0)) || (Number(y.w || 0) - Number(x.w || 0)) || String(x.name).localeCompare(String(y.name)));
+        t.leaderboard = Object.keys(lbMap).map(k => lbMap[k]).sort((x: any, y: any) => (Number(y.points || 0) - Number(x.points || 0)) || (Number(y.w || 0) - Number(x.w || 0)) || String(x.name).localeCompare(String(y.name)));
       } catch (err) {
         console.error('Error building leaderboard for tournament', t.id, err);
         t.leaderboard = [];

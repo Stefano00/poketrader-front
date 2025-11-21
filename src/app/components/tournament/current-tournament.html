@@ -3,7 +3,8 @@
     <h3 class="mb-0">Vista previa del torneo</h3>
     <button class="btn btn-outline-secondary" (click)="goBack()" title="Volver" aria-label="Volver">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-        <path fill-rule="evenodd" d="M15 8a.5.5 0 0 1-.5.5H3.707l4.147 4.146a.5.5 0 0 1-.708.708l-5-5a.5.5 0 0 1 0-.708l5-5a.5.5 0 1 1 .708.708L3.707 7.5H14.5A.5.5 0 0 1 15 8z"/>
+        <path fill-rule="evenodd"
+          d="M15 8a.5.5 0 0 1-.5.5H3.707l4.147 4.146a.5.5 0 0 1-.708.708l-5-5a.5.5 0 0 1 0-.708l5-5a.5.5 0 1 1 .708.708L3.707 7.5H14.5A.5.5 0 0 1 15 8z" />
       </svg>
     </button>
   </div>
@@ -13,28 +14,44 @@
   </div>
 
   <div class="mb-2">
-  <label class="form-label">Countdown minutos</label>
-  <input type="number" class="form-control" [(ngModel)]="countdownMinutes" min="1" />
-  <!-- Persistent countdown display -->
-  <div *ngIf="running || displaySeconds() !== 0" class="mt-2">
-    <div class="alert" [class.alert-info]="displaySeconds() > 0" [class.alert-warning]="displaySeconds() <= 0 && displaySeconds() > -900" [class.alert-danger]="displaySeconds() <= -900">
-      <div class="d-flex justify-content-between align-items-center">
-        <span><strong>Countdown:</strong> {{ displayTime() }}</span>
-        <span *ngIf="running" class="badge bg-success">En curso</span>
+    <label class="form-label">Countdown minutos</label>
+    <input type="number" class="form-control" [(ngModel)]="countdownMinutes" min="1" />
+    <!-- Persistent countdown display -->
+    <div *ngIf="running || displaySeconds() !== 0" class="mt-2">
+      <div class="alert" [class.alert-info]="displaySeconds() > 0"
+        [class.alert-warning]="displaySeconds() <= 0 && displaySeconds() > -900"
+        [class.alert-danger]="displaySeconds() <= -900">
+        <div class="d-flex justify-content-between align-items-center">
+          <span><strong>Countdown:</strong> {{ displayTime() }}</span>
+          <span *ngIf="running" class="badge bg-success">En curso</span>
+        </div>
       </div>
     </div>
   </div>
-  </div>
 
   <div class="mb-2 d-flex gap-2 flex-wrap align-items-center actions-row">
-    <button class="btn btn-primary action-btn" (click)="randomizePairings()" [disabled]="tournamentFinished">Reordenar</button>
-    <button class="btn btn-success action-btn" (click)="startCountdown()" [disabled]="tournamentFinished">Comenzar</button>
-    <button class="btn btn-secondary action-btn" (click)="openResetModal()" title="Resetear sólo los controles de resultado" [disabled]="tournamentFinished">Reset</button>
-    <button class="btn btn-outline-secondary action-btn" (click)="stopCountdown()" [disabled]="tournamentFinished">Detener</button>
-    <button class="btn btn-primary action-btn" (click)="saveAndContinue()" [disabled]="tournamentFinished || savingMatches || (!hasChanges() && !canContinue())" title="Guarda resultados y avanza cuando la ronda está lista">
+    <button class="btn btn-primary action-btn" (click)="randomizePairings()"
+      [disabled]="tournamentFinished">Reordenar</button>
+    <button class="btn btn-success action-btn" (click)="startCountdown()"
+      [disabled]="tournamentFinished">Comenzar</button>
+    <button class="btn btn-secondary action-btn" (click)="openResetModal()"
+      title="Resetear sólo los controles de resultado" [disabled]="tournamentFinished">Reset</button>
+    <button class="btn btn-outline-secondary action-btn" (click)="stopCountdown()"
+      [disabled]="tournamentFinished">Detener</button>
+    <button class="btn btn-primary action-btn" (click)="saveAndContinue()"
+      [disabled]="tournamentFinished || savingMatches || (!hasChanges() && !canContinue())"
+      title="Guarda resultados y avanza cuando la ronda está lista">
       {{ savingMatches ? 'Guardando...' : 'Guardar y continuar' }}
     </button>
-    <button class="btn btn-danger ms-auto action-btn finalize-btn" (click)="openFinalizeModal()" [disabled]="!hasAnySavedMatches || tournamentFinished">Finalizar torneo</button>
+    <button class="btn btn-danger ms-auto action-btn finalize-btn" (click)="openFinalizeModal()"
+      [disabled]="!hasAnySavedMatches || tournamentFinished">Finalizar torneo</button>
+    <button class="btn btn-outline-secondary action-btn" (click)="toggleFullscreen()">
+      {{ showFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa' }}
+    </button>
+    <div class="form-check form-switch d-inline-block ms-2">
+      <input class="form-check-input" type="checkbox" id="aliasToggle" [(ngModel)]="showAliases">
+      <label class="form-check-label" for="aliasToggle">Mostrar Alias</label>
+    </div>
   </div>
 
   <div class="card mb-3 pairings-desktop">
@@ -58,13 +75,8 @@
             <tr *ngFor="let player of players; let playerIndex = index">
               <td *ngIf="playerIndex === 0" [attr.rowspan]="players.length" class="align-middle">
                 <label class="form-label mb-0">Ronda</label>
-                <input
-                  type="number"
-                  class="form-control form-control-sm"
-                  style="width:80px; display:inline-block;"
-                  [value]="getRoundValue(tableId)"
-                  readonly
-                />
+                <input type="number" class="form-control form-control-sm" style="width:80px; display:inline-block;"
+                  [value]="getRoundValue(tableId)" readonly />
               </td>
               <td *ngIf="playerIndex === 0" [attr.rowspan]="players.length" class="align-middle text-center">
                 {{ p.table }}
@@ -74,16 +86,14 @@
               <td>
                 <div class="player-line mb-0">
                   <div class="player-name-edit">
-                    <span class="player-name">{{ player.name }}</span>
-                    <button
-                      type="button"
-                      class="btn btn-link p-0 edit-score-btn"
-                      [disabled]="!player.id || player.isBye"
-                      (click)="openPlayerResultEditorFromPlayer(player)"
-                      aria-label="Editar totales de {{ player.name }}"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z"/>
+                    <span class="player-name">{{ getDisplayName(player) }}</span>
+                    <button type="button" class="btn btn-link p-0 edit-score-btn"
+                      [disabled]="!player.id || player.isBye" (click)="openPlayerResultEditorFromPlayer(player)"
+                      aria-label="Editar totales de {{ player.name }}">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                        viewBox="0 0 16 16">
+                        <path
+                          d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z" />
                       </svg>
                     </button>
                   </div>
@@ -94,17 +104,14 @@
                 <div class="game-radio-group">
                   <ng-container *ngFor="let i of gamesRange(); let idx = index">
                     <div class="form-check form-check-inline game-radio">
-                      <input
-                        class="form-check-input"
-                        type="radio"
-                        [attr.name]="'desktop-game-' + tableId + '-' + idx"
+                      <input class="form-check-input" type="radio" [attr.name]="'desktop-game-' + tableId + '-' + idx"
                         [attr.id]="'desktop-game-' + tableId + '-' + idx + '-' + player.side"
                         [checked]="getGameWinner(tableId, idx) === player.side"
                         (change)="selectGameWinner(tableId, idx, player.side)"
                         [disabled]="tournamentFinished || player.isBye"
-                        [attr.aria-label]="'Juego ' + (idx + 1) + ' para ' + player.name"
-                      />
-                      <label class="form-check-label" [attr.for]="'desktop-game-' + tableId + '-' + idx + '-' + player.side">
+                        [attr.aria-label]="'Juego ' + (idx + 1) + ' para ' + player.name" />
+                      <label class="form-check-label"
+                        [attr.for]="'desktop-game-' + tableId + '-' + idx + '-' + player.side">
                         G{{ idx + 1 }}
                       </label>
                     </div>
@@ -140,16 +147,12 @@
         <div class="pairing-players">
           <div class="player-line" *ngFor="let player of players">
             <div class="player-name-edit">
-              <span class="player-name">{{ player.name }}</span>
-              <button
-                type="button"
-                class="btn btn-link p-0 edit-score-btn"
-                [disabled]="!player.id || player.isBye"
-                (click)="openPlayerResultEditorFromPlayer(player)"
-                aria-label="Editar totales de {{ player.name }}"
-              >
+              <span class="player-name">{{ getDisplayName(player) }}</span>
+              <button type="button" class="btn btn-link p-0 edit-score-btn" [disabled]="!player.id || player.isBye"
+                (click)="openPlayerResultEditorFromPlayer(player)" aria-label="Editar totales de {{ player.name }}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z"/>
+                  <path
+                    d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z" />
                 </svg>
               </button>
             </div>
@@ -157,16 +160,12 @@
             <div class="game-radio-group">
               <ng-container *ngFor="let i of gamesRange(); let idx = index">
                 <div class="form-check form-check-inline game-radio">
-                  <input
-                    class="form-check-input"
-                    type="radio"
-                    [attr.name]="'mobile-game-' + tableId + '-' + idx"
+                  <input class="form-check-input" type="radio" [attr.name]="'mobile-game-' + tableId + '-' + idx"
                     [attr.id]="'mobile-game-' + tableId + '-' + idx + '-' + player.side"
                     [checked]="getGameWinner(tableId, idx) === player.side"
                     (change)="selectGameWinner(tableId, idx, player.side)"
                     [disabled]="tournamentFinished || player.isBye"
-                    [attr.aria-label]="'Juego ' + (idx + 1) + ' para ' + player.name"
-                  />
+                    [attr.aria-label]="'Juego ' + (idx + 1) + ' para ' + player.name" />
                   <label class="form-check-label" [attr.for]="'mobile-game-' + tableId + '-' + idx + '-' + player.side">
                     G{{ idx + 1 }}
                   </label>
@@ -185,28 +184,33 @@
     </div>
   </div>
 
-  <div *ngIf="tournamentFinished" class="card mb-3">
+  <div *ngIf="tournamentFinished || round >= 2" class="card mb-3">
     <div class="card-body">
       <h5>Resultados finales</h5>
       <div *ngIf="leaderboard && leaderboard.length > 0; else noLeaderboard" class="table-responsive-sm final-results">
         <table class="table table-sm mb-0">
           <thead>
-            <tr><th>#</th><th>Jugador</th><th class="text-center">W</th><th class="text-center">L</th><th class="text-center">T</th><th class="text-center">Puntos</th></tr>
+            <tr>
+              <th>#</th>
+              <th>Jugador</th>
+              <th class="text-center">W</th>
+              <th class="text-center">L</th>
+              <th class="text-center">T</th>
+              <th class="text-center">Puntos</th>
+            </tr>
           </thead>
           <tbody>
             <tr *ngFor="let p of leaderboard; let i = index">
               <td>{{ i + 1 }}</td>
               <td>
                 <div class="player-name-edit">
-                  <span>{{ p.name }}</span>
-                  <button
-                    type="button"
-                    class="btn btn-link p-0 edit-score-btn"
-                    (click)="openPlayerResultEditor(p)"
-                    aria-label="Editar totales de {{ p.name }}"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                      <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z"/>
+                  <span>{{ getDisplayName(p) }}</span>
+                  <button type="button" class="btn btn-link p-0 edit-score-btn" (click)="openPlayerResultEditor(p)"
+                    aria-label="Editar totales de {{ p.name }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                      viewBox="0 0 16 16">
+                      <path
+                        d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l9.5-9.5zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z" />
                     </svg>
                   </button>
                 </div>
@@ -235,31 +239,37 @@
           <h5 class="mb-1">Editar totales — {{ editingPlayerResult.name }}</h5>
           <small class="text-muted">Ajusta victorias, derrotas y empates globales.</small>
         </div>
-        <button type="button" class="btn-close" aria-label="Cerrar" (click)="cancelPlayerResultEditor()" [disabled]="resultEditSaving"></button>
+        <button type="button" class="btn-close" aria-label="Cerrar" (click)="cancelPlayerResultEditor()"
+          [disabled]="resultEditSaving"></button>
       </div>
       <div class="row g-3 align-items-end">
         <div class="col-md-3">
           <label class="form-label">Victorias (W)</label>
-          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.w" [ngModelOptions]="{ standalone: true }" />
+          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.w"
+            [ngModelOptions]="{ standalone: true }" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Derrotas (L)</label>
-          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.l" [ngModelOptions]="{ standalone: true }" />
+          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.l"
+            [ngModelOptions]="{ standalone: true }" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Empates (T)</label>
-          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.t" [ngModelOptions]="{ standalone: true }" />
+          <input type="number" min="0" class="form-control" [(ngModel)]="editingPlayerResult.t"
+            [ngModelOptions]="{ standalone: true }" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Motivo</label>
-          <textarea class="form-control" rows="2" maxlength="140" [(ngModel)]="editingPlayerResult.reason" [ngModelOptions]="{ standalone: true }"></textarea>
+          <textarea class="form-control" rows="2" maxlength="140" [(ngModel)]="editingPlayerResult.reason"
+            [ngModelOptions]="{ standalone: true }"></textarea>
         </div>
       </div>
       <div *ngIf="resultEditError" class="alert alert-danger mt-3 mb-0">
         {{ resultEditError }}
       </div>
       <div class="d-flex justify-content-end gap-2 mt-3">
-        <button class="btn btn-outline-secondary" type="button" (click)="cancelPlayerResultEditor()" [disabled]="resultEditSaving">Cancelar</button>
+        <button class="btn btn-outline-secondary" type="button" (click)="cancelPlayerResultEditor()"
+          [disabled]="resultEditSaving">Cancelar</button>
         <button class="btn btn-primary" type="button" (click)="savePlayerResultEdit()" [disabled]="resultEditSaving">
           {{ resultEditSaving ? 'Guardando...' : 'Guardar totales' }}
         </button>
@@ -270,7 +280,8 @@
 </div>
 
 <!-- Fullscreen overlay -->
-<div *ngIf="showFullscreen" class="fullscreen-overlay d-flex align-items-center justify-content-center" (click)="closeFullscreen()">
+<div *ngIf="showFullscreen" class="fullscreen-overlay d-flex align-items-center justify-content-center"
+  (click)="closeFullscreen()">
   <div class="text-center text-white">
     <h1 style="font-size: 10vw;">{{ displayTime() }}</h1>
     <p>Presiona Esc o haz click para cerrar</p>
@@ -278,7 +289,8 @@
 </div>
 
 <!-- Save confirmation modal (double confirmation) -->
-<div *ngIf="showSaveModal" class="modal-backdrop d-flex align-items-center justify-content-center" style="position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,0.5)">
+<div *ngIf="showSaveModal" class="modal-backdrop d-flex align-items-center justify-content-center"
+  style="position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,0.5)">
   <div class="card" style="width:420px;">
     <div class="card-body">
       <h5 class="card-title">Confirmar guardado</h5>
@@ -288,20 +300,22 @@
       </ng-container>
       <div class="d-flex justify-content-end gap-2">
         <button class="btn btn-secondary" (click)="cancelSaveModal()" [disabled]="savingMatches">Cancelar</button>
-  <button class="btn btn-primary" (click)="confirmSaveFromModal()" [disabled]="savingMatches">
-    {{ savingMatches ? 'Guardando...' : 'Confirmar' }}
-  </button>
+        <button class="btn btn-primary" (click)="confirmSaveFromModal()" [disabled]="savingMatches">
+          {{ savingMatches ? 'Guardando...' : 'Confirmar' }}
+        </button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Reset confirmation modal -->
-<div *ngIf="showResetModal" class="modal-backdrop d-flex align-items-center justify-content-center" style="position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,0.5)">
+<div *ngIf="showResetModal" class="modal-backdrop d-flex align-items-center justify-content-center"
+  style="position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,0.5)">
   <div class="card" style="width:420px;">
     <div class="card-body">
       <h5 class="card-title">Confirmar reset</h5>
-      <p>Esto limpiará sólo los controles de resultado (no cambiará la ronda ni los puntajes guardados). ¿Deseas continuar?</p>
+      <p>Esto limpiará sólo los controles de resultado (no cambiará la ronda ni los puntajes guardados). ¿Deseas
+        continuar?</p>
       <div class="d-flex justify-content-end gap-2">
         <button class="btn btn-secondary" (click)="cancelResetModal()">Cancelar</button>
         <button class="btn btn-danger" (click)="confirmResetFromModal()">Resetear</button>
@@ -311,30 +325,32 @@
 </div>
 
 <!-- Finalize confirmation modal -->
-<div *ngIf="showFinalizeModal" class="modal-backdrop d-flex align-items-center justify-content-center" style="position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,0.5)">
+<div *ngIf="showFinalizeModal" class="modal-backdrop d-flex align-items-center justify-content-center"
+  style="position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,0.5)">
   <div class="card" style="width:420px;">
     <div class="card-body">
       <h5 class="card-title">Finalizar torneo</h5>
-      <p class="text-danger">Esta acción marcará el torneo como finalizado y deshabilitará cualquier edición. ¿Deseas continuar?</p>
+      <p class="text-danger">Esta acción marcará el torneo como finalizado y deshabilitará cualquier edición. ¿Deseas
+        continuar?</p>
       <div class="d-flex justify-content-end gap-2">
-          <button class="btn btn-secondary" (click)="cancelFinalizeModal()">Cancelar</button>
-          <ng-container *ngIf="hasChanges(); else justFinalize">
-            <button class="btn btn-primary" (click)="confirmFinalizeFromModal()">Guardar y finalizar</button>
-            <button class="btn btn-danger" (click)="finalizeWithoutSaving()">Finalizar sin guardar</button>
-          </ng-container>
-          <ng-template #justFinalize>
-            <button class="btn btn-danger" (click)="confirmFinalizeFromModal()">Finalizar torneo</button>
-          </ng-template>
+        <button class="btn btn-secondary" (click)="cancelFinalizeModal()">Cancelar</button>
+        <ng-container *ngIf="hasChanges(); else justFinalize">
+          <button class="btn btn-primary" (click)="confirmFinalizeFromModal()">Guardar y finalizar</button>
+          <button class="btn btn-danger" (click)="finalizeWithoutSaving()">Finalizar sin guardar</button>
+        </ng-container>
+        <ng-template #justFinalize>
+          <button class="btn btn-danger" (click)="confirmFinalizeFromModal()">Finalizar torneo</button>
+        </ng-template>
       </div>
     </div>
   </div>
 </div>
 
 <style>
-.fullscreen-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.85);
-  z-index: 1050;
-}
+  .fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 1050;
+  }
 </style>
