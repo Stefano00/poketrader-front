@@ -1,39 +1,22 @@
 <mat-sidenav-container class="sidenav-container">
-  <mat-sidenav
-    #drawer
-    class="sidenav"
-    fixedInViewport
-    [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
-    [mode]="(isHandset$ | async) ? 'over' : 'side'"
-    [disableClose]="!(isHandset$ | async)"
-  >
+  <mat-sidenav #drawer class="sidenav" fixedInViewport [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
+    [mode]="(isHandset$ | async) ? 'over' : 'side'" [disableClose]="!(isHandset$ | async)">
     <mat-toolbar class="sidenav-toolbar">
       <span class="menu-title">Menu</span>
       @if (isHandset$ | async) {
-        <button
-          type="button"
-          aria-label="Close menu"
-          mat-icon-buttonlat
-          class="close-button"
-          (click)="drawer.close()"
-        >
-          <mat-icon>close</mat-icon>
-        </button>
+      <button type="button" aria-label="Close menu" mat-icon-buttonlat class="close-button" (click)="drawer.close()">
+        <mat-icon>close</mat-icon>
+      </button>
       }
     </mat-toolbar>
-    
+
     <mat-nav-list class="nav-list">
       @for (item of menuItems; track item.path) {
-        <a
-          mat-list-item
-          [routerLink]="item.path"
-          class="nav-item"
-          (click)="closeDrawer()"
-          [attr.aria-label]="'Navigate to ' + item.label"
-        >
-          <mat-icon matListItemIcon class="nav-icon">{{ item.icon }}</mat-icon>
-          <span matListItemTitle class="nav-label">{{ item.label }}</span>
-        </a>
+      <a mat-list-item [routerLink]="item.path" class="nav-item" (click)="closeDrawer()"
+        [attr.aria-label]="'Navigate to ' + item.label">
+        <mat-icon matListItemIcon class="nav-icon">{{ item.icon }}</mat-icon>
+        <span matListItemTitle class="nav-label">{{ item.label }}</span>
+      </a>
       }
     </mat-nav-list>
   </mat-sidenav>
@@ -41,31 +24,20 @@
   <mat-sidenav-content class="main-content">
     <mat-toolbar color="primary" class="main-toolbar">
       @if (isHandset$ | async) {
-        <button
-          type="button"
-          aria-label="Open navigation menu"
-          mat-icon-button
-          class="menu-button"
-          (click)="toggleDrawer()"
-        >
-          <mat-icon>menu</mat-icon>
-        </button>
+      <button type="button" aria-label="Open navigation menu" mat-icon-button class="menu-button"
+        (click)="toggleDrawer()">
+        <mat-icon>menu</mat-icon>
+      </button>
       } @else {
-        <button
-          type="button"
-          aria-label="Ocultar menú"
-          mat-icon-button
-          class="menu-button"
-          (click)="toggleDrawer()"
-        >
-          <mat-icon>{{ desktopDrawerOpen ? 'chevron_left' : 'chevron_right' }}</mat-icon>
-        </button>
+      <button type="button" aria-label="Ocultar menú" mat-icon-button class="menu-button" (click)="toggleDrawer()">
+        <mat-icon>{{ desktopDrawerOpen ? 'chevron_left' : 'chevron_right' }}</mat-icon>
+      </button>
       }
-      <span class="app-title">PokéTrader</span>
-      
+      <span class="app-title">InsaneGames</span>
+
       <!-- Spacer to push content to the right -->
       <span class="spacer"></span>
-      
+
       <!-- Optional: Add user menu or other toolbar actions here -->
     </mat-toolbar>
 

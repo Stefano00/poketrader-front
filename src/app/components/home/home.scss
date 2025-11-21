@@ -1,0 +1,132 @@
+.home-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.welcome-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 60px 24px;
+    text-align: center;
+    border-radius: 0 0 24px 24px;
+    margin-bottom: 48px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.home-logo {
+    max-width: 250px;
+    width: 100%;
+    height: auto;
+    margin-bottom: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.welcome-content h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0 0 16px 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.subtitle {
+    font-size: 1.25rem;
+    font-weight: 300;
+    margin: 0;
+    opacity: 0.95;
+}
+
+.instagram-section {
+    padding: 0 24px 48px;
+}
+
+.instagram-section h2 {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: #333;
+}
+
+.instagram-handle {
+    text-align: center;
+    font-size: 1.1rem;
+    margin: 0 0 32px 0;
+}
+
+.instagram-handle a {
+    color: #E1306C;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.instagram-handle a:hover {
+    color: #C13584;
+}
+
+.instagram-feed {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.instagram-embed-container {
+    background: #fafafa;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    margin-bottom: 24px;
+}
+
+.instagram-iframe {
+    display: block;
+    border: none;
+    min-height: 600px;
+}
+
+.instagram-cta {
+    text-align: center;
+    margin-top: 32px;
+}
+
+.instagram-button {
+    display: inline-block;
+    padding: 14px 32px;
+    background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 24px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 12px rgba(225, 48, 108, 0.3);
+}
+
+.instagram-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(225, 48, 108, 0.4);
+}
+
+@media (max-width: 768px) {
+    .welcome-content h1 {
+        font-size: 2rem;
+    }
+
+    .subtitle {
+        font-size: 1.1rem;
+    }
+
+    .instagram-section h2 {
+        font-size: 1.5rem;
+    }
+
+    .welcome-section {
+        padding: 40px 16px;
+        margin-bottom: 32px;
+    }
+
+    .instagram-section {
+        padding: 0 16px 32px;
+    }
+}
